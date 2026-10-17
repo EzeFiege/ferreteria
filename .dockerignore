@@ -6,5 +6,4 @@ backups
 .env
 .env.*
 !.env.example
-apps/web
 *.log
