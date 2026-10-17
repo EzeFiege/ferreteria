@@ -13,6 +13,47 @@ import {
 import { apiUrl } from './api-url.js';
 import { ConfiguracionPiloto } from './ConfiguracionPiloto.js';
 import { ReportesHistorial } from './ReportesHistorial.js';
+import { CatalogoStock } from './CatalogoStock.js';
+
+export interface ItemCarrito {
+  id: string;
+  productoId?: string | undefined;
+  codigo?: string | undefined;
+  nombre: string;
+  rubroId?: string | undefined;
+  unidad: 'principal' | 'secundaria';
+  nombreUnidad: string;
+  factorConversion: string;
+  permiteFraccion: boolean;
+  cantidad: string;
+  precioUnitario: string;
+  descuentoPct: string;
+  descuentoMonto: string;
+  subtotal: string;
+}
+
+export interface ListaPrecioItem {
+  id: string;
+  nombre: string;
+  margenPct: string;
+  orden: number;
+}
+
+export function calcularSubtotalCentavos(
+  precioUnitario: string,
+  cantidad: number,
+  descuentoPct: string,
+  descuentoMonto: string,
+): bigint {
+  const precioUnitCent = aCentavos(precioUnitario);
+  const brutoCent =
+    (precioUnitCent * BigInt(Math.round(cantidad * 1000))) / 1000n;
+  const pct = Math.min(100, Math.max(0, parseFloat(descuentoPct) || 0));
+  const conPct = (brutoCent * BigInt(Math.round((100 - pct) * 100))) / 10000n;
+  const descMontoCent = aCentavos(descuentoMonto || '0.00');
+  const neto = conPct - descMontoCent;
+  return neto > 0n ? neto : 0n;
+}
 
 export function formatearPesos(importeDecimal: string): string {
   const limpio = importeDecimal.trim();
@@ -191,8 +232,16 @@ export function App(): ReactElement {
     useState<ResumenTurnoEstado | null>(null);
 
   const [pestana, setPestana] = useState<
-    'venta' | 'egreso' | 'arqueo' | 'reportes' | 'configuracion'
+    'venta' | 'egreso' | 'arqueo' | 'reportes' | 'configuracion' | 'catalogo'
   >('venta');
+
+  const [listasPrecios, setListasPrecios] = useState<ListaPrecioItem[]>([]);
+  const [listaPrecioIdSeleccionada, setListaPrecioIdSeleccionada] =
+    useState<string>('');
+  const [itemsCarrito, setItemsCarrito] = useState<ItemCarrito[]>([]);
+  const [busquedaProducto, setBusquedaProducto] = useState<string>('');
+  const [buscandoProducto, setBuscandoProducto] = useState<boolean>(false);
+  const [mensajePistola, setMensajePistola] = useState<string | null>(null);
 
   const [montoEnteroTeclado, setMontoEnteroTeclado] = useState<string>('0');
   const [medioPagoIdSeleccionado, setMedioPagoIdSeleccionado] =
@@ -369,7 +418,346 @@ export function App(): ReactElement {
       salidasEfectivoColaCentavos,
   );
 
-  const montoVentaFormateado = `${montoEnteroTeclado}.00`;
+  const totalCarritoCentavos = itemsCarrito.reduce(
+    (acc, it) => acc + aCentavos(it.subtotal),
+    0n,
+  );
+  const montoVentaFormateado =
+    itemsCarrito.length > 0
+      ? deCentavos(totalCarritoCentavos)
+      : `${montoEnteroTeclado}.00`;
+
+  const cargarListasPrecios = useCallback(async (token: string) => {
+    try {
+      const res = await fetch(apiUrl('/api/listas-precios'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as ListaPrecioItem[];
+        setListasPrecios(data);
+        if (data.length > 0 && !listaPrecioIdSeleccionada && data[0]) {
+          setListaPrecioIdSeleccionada(data[0].id);
+        }
+      }
+    } catch {
+      // Ignora fallo offline
+    }
+  }, [listaPrecioIdSeleccionada]);
+
+  useEffect(() => {
+    if (operadorActivo?.token) {
+      void cargarListasPrecios(operadorActivo.token);
+    }
+  }, [cargarListasPrecios, operadorActivo?.token]);
+
+  const agregarProductoPorCodigo = useCallback(
+    async (codigoOTexto: string) => {
+      if (!operadorActivo || !codigoOTexto.trim()) {
+        return;
+      }
+      const query = codigoOTexto.trim();
+      setBuscandoProducto(true);
+      setMensajePistola(null);
+
+      try {
+        let productoEncontrado: {
+          id: string;
+          codigo: string;
+          nombre: string;
+          costoBase: string;
+          stockActualBase?: string | undefined;
+          unidadPrincipal: string;
+          unidadSecundaria?: string | null | undefined;
+          factorConversion: string;
+          permiteFraccion: boolean;
+          precios: Record<string, string>;
+          rubroId?: string | null | undefined;
+        } | null = null;
+
+        // 1. Intentar lookup-ean
+        try {
+          const resEan = await fetch(
+            apiUrl(`/api/productos/lookup-ean/${encodeURIComponent(query)}`),
+            {
+              headers: { Authorization: `Bearer ${operadorActivo.token}` },
+            },
+          );
+          if (resEan.ok) {
+            const eanData = (await resEan.json()) as {
+              encontrado: boolean;
+              productoId?: string;
+              codigo?: string;
+              nombre?: string;
+              costoBase?: string;
+              stockActualBase?: string;
+              unidadPrincipal?: string;
+              unidadSecundaria?: string;
+              factorConversion?: string;
+              permiteFraccion?: boolean;
+              precios?: Record<string, string>;
+            };
+            if (eanData.encontrado && eanData.productoId) {
+              productoEncontrado = {
+                id: eanData.productoId,
+                codigo: eanData.codigo ?? query,
+                nombre: eanData.nombre ?? 'Artículo',
+                costoBase: eanData.costoBase ?? '0.00',
+                stockActualBase: eanData.stockActualBase,
+                unidadPrincipal: eanData.unidadPrincipal ?? 'Unidad',
+                unidadSecundaria: eanData.unidadSecundaria,
+                factorConversion: eanData.factorConversion ?? '1.000',
+                permiteFraccion: Boolean(eanData.permiteFraccion),
+                precios: eanData.precios ?? {},
+              };
+            }
+          }
+        } catch {
+          // Ignora fallo de lookup-ean
+        }
+
+        // 2. Si no es EAN directo, buscar en catálogo por nombre o código interno
+        if (!productoEncontrado) {
+          const resCat = await fetch(
+            apiUrl(`/api/productos?busqueda=${encodeURIComponent(query)}`),
+            {
+              headers: { Authorization: `Bearer ${operadorActivo.token}` },
+            },
+          );
+          if (resCat.ok) {
+            const listData = (await resCat.json()) as Array<{
+              id: string;
+              codigo: string;
+              nombre: string;
+              costo_base: string;
+              stock_actual_base: string;
+              unidad_principal: string;
+              unidad_secundaria: string | null;
+              factor_conversion: string;
+              permite_fraccion: boolean;
+              precios: Record<string, string>;
+              rubro_id: string | null;
+            }>;
+            if (listData.length > 0 && listData[0]) {
+              const p = listData[0];
+              productoEncontrado = {
+                id: p.id,
+                codigo: p.codigo,
+                nombre: p.nombre,
+                costoBase: p.costo_base,
+                stockActualBase: p.stock_actual_base,
+                unidadPrincipal: p.unidad_principal,
+                unidadSecundaria: p.unidad_secundaria,
+                factorConversion: p.factor_conversion,
+                permiteFraccion: p.permite_fraccion,
+                precios: p.precios,
+                rubroId: p.rubro_id,
+              };
+            }
+          }
+        }
+
+        if (!productoEncontrado) {
+          setMensajePistola(`No se encontró "${query}" en el catálogo.`);
+          return;
+        }
+
+        const prod = productoEncontrado;
+        const precioUnit =
+          prod.precios[listaPrecioIdSeleccionada] ?? prod.costoBase;
+
+        setItemsCarrito((prev) => {
+          const idx = prev.findIndex(
+            (it) => it.productoId === prod.id && it.unidad === 'principal',
+          );
+          if (idx >= 0 && prev[idx]) {
+            const item = prev[idx];
+            const cantNum = (parseFloat(item.cantidad) || 0) + 1;
+            const cantStr = cantNum.toFixed(3);
+            const subtotalCent = calcularSubtotalCentavos(
+              item.precioUnitario,
+              cantNum,
+              item.descuentoPct,
+              item.descuentoMonto,
+            );
+            const itemActualizado: ItemCarrito = {
+              ...item,
+              cantidad: cantStr,
+              subtotal: deCentavos(subtotalCent),
+            };
+            const copia = [...prev];
+            copia[idx] = itemActualizado;
+            return copia;
+          }
+
+          const nuevoItem: ItemCarrito = {
+            id: generarUuid(),
+            productoId: prod.id,
+            codigo: prod.codigo,
+            nombre: prod.nombre,
+            rubroId: prod.rubroId ?? undefined,
+            unidad: 'principal',
+            nombreUnidad: prod.unidadPrincipal,
+            factorConversion: prod.factorConversion,
+            permiteFraccion: prod.permiteFraccion,
+            cantidad: '1.000',
+            precioUnitario: precioUnit,
+            descuentoPct: '0',
+            descuentoMonto: '0.00',
+            subtotal: precioUnit,
+          };
+          return [...prev, nuevoItem];
+        });
+
+        setMensajePistola(
+          `✓ ${prod.nombre} agregado (${formatearPesos(precioUnit)})`,
+        );
+        setBusquedaProducto('');
+      } catch {
+        setMensajePistola('Error al consultar producto.');
+      } finally {
+        setBuscandoProducto(false);
+      }
+    },
+    [listaPrecioIdSeleccionada, operadorActivo],
+  );
+
+  useEffect(() => {
+    if (pestana !== 'venta') {
+      return;
+    }
+    let buffer = '';
+    let ultimoTiempo = 0;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const esInput =
+        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+
+      const ahora = Date.now();
+      const delta = ahora - ultimoTiempo;
+      ultimoTiempo = ahora;
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3) {
+          e.preventDefault();
+          const codigo = buffer.trim();
+          buffer = '';
+          void agregarProductoPorCodigo(codigo);
+        } else {
+          buffer = '';
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        if (delta > 80 && buffer.length > 0 && !esInput) {
+          buffer = '';
+        }
+        if (!esInput || delta < 60) {
+          buffer += e.key;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [agregarProductoPorCodigo, pestana]);
+
+  const cambiarUnidadItem = (
+    itemId: string,
+    nuevaUnidad: 'principal' | 'secundaria',
+  ) => {
+    setItemsCarrito((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) {
+          return it;
+        }
+        const factor = parseFloat(it.factorConversion) || 1;
+        const precioPrincipalCent = aCentavos(it.precioUnitario);
+        let nuevoPrecioUnitario = it.precioUnitario;
+        if (
+          it.unidad === 'principal' &&
+          nuevaUnidad === 'secundaria' &&
+          factor > 0
+        ) {
+          const precioSecCent =
+            (precioPrincipalCent * 1000n) / BigInt(Math.round(factor * 1000));
+          nuevoPrecioUnitario = deCentavos(precioSecCent);
+        } else if (
+          it.unidad === 'secundaria' &&
+          nuevaUnidad === 'principal' &&
+          factor > 0
+        ) {
+          const precioPrincCent =
+            (precioPrincipalCent * BigInt(Math.round(factor * 1000))) / 1000n;
+          nuevoPrecioUnitario = deCentavos(precioPrincCent);
+        }
+        const cant = parseFloat(it.cantidad) || 1;
+        const subtotalCent = calcularSubtotalCentavos(
+          nuevoPrecioUnitario,
+          cant,
+          it.descuentoPct,
+          it.descuentoMonto,
+        );
+        return {
+          ...it,
+          unidad: nuevaUnidad,
+          precioUnitario: nuevoPrecioUnitario,
+          subtotal: deCentavos(subtotalCent),
+        };
+      }),
+    );
+  };
+
+  const actualizarCantidadItem = (itemId: string, nuevaCantidad: string) => {
+    setItemsCarrito((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) {
+          return it;
+        }
+        const cant = Math.max(0.001, parseFloat(nuevaCantidad) || 0);
+        const subtotalCent = calcularSubtotalCentavos(
+          it.precioUnitario,
+          cant,
+          it.descuentoPct,
+          it.descuentoMonto,
+        );
+        return {
+          ...it,
+          cantidad: cant.toFixed(3),
+          subtotal: deCentavos(subtotalCent),
+        };
+      }),
+    );
+  };
+
+  const actualizarDescuentoPctItem = (itemId: string, pctStr: string) => {
+    setItemsCarrito((prev) =>
+      prev.map((it) => {
+        if (it.id !== itemId) {
+          return it;
+        }
+        const cant = parseFloat(it.cantidad) || 1;
+        const subtotalCent = calcularSubtotalCentavos(
+          it.precioUnitario,
+          cant,
+          pctStr,
+          it.descuentoMonto,
+        );
+        return {
+          ...it,
+          descuentoPct: pctStr,
+          subtotal: deCentavos(subtotalCent),
+        };
+      }),
+    );
+  };
+
+  const eliminarItemCarrito = (itemId: string) => {
+    setItemsCarrito((prev) => prev.filter((it) => it.id !== itemId));
+  };
 
   const abrirTurno = async (): Promise<void> => {
     if (!operadorActivo) {
@@ -430,6 +818,25 @@ export function App(): ReactElement {
       id: ventaId,
       turnoId,
       total: montoVentaFormateado,
+      items:
+        itemsCarrito.length > 0
+          ? itemsCarrito.map((it) => ({
+              productoId: it.productoId,
+              descripcion: it.nombre,
+              cantidad: it.cantidad,
+              unidad: it.unidad,
+              precioUnit: it.precioUnitario,
+              descuentoPct:
+                it.descuentoPct !== '0' && it.descuentoPct !== ''
+                  ? it.descuentoPct
+                  : undefined,
+              descuentoMonto:
+                it.descuentoMonto !== '0.00' && it.descuentoMonto !== ''
+                  ? it.descuentoMonto
+                  : undefined,
+              subtotal: it.subtotal,
+            }))
+          : undefined,
       pagos: [
         {
           movimientoId,
@@ -463,6 +870,7 @@ export function App(): ReactElement {
     setMontoEnteroTeclado('0');
     setDescripcionVenta('');
     setToquesVentaActual(0);
+    setItemsCarrito([]);
 
     if (modoSinConexion) {
       await encolarOperacion(operacion);
@@ -929,7 +1337,7 @@ export function App(): ReactElement {
           </div>
         </section>
 
-        <nav className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-200 p-1 md:grid-cols-5">
+        <nav className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-200 p-1 md:grid-cols-6">
           <button
             type="button"
             data-testid="tab-venta"
@@ -1000,7 +1408,29 @@ export function App(): ReactElement {
           >
             5. Config. y Piloto
           </button>
+          <button
+            type="button"
+            data-testid="tab-catalogo"
+            onClick={() => {
+              setPestana('catalogo');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'catalogo'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            6. Catálogo y Stock
+          </button>
         </nav>
+
+        {pestana === 'catalogo' && (
+          <CatalogoStock
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            rubros={contexto.rubros}
+          />
+        )}
 
         {pestana === 'reportes' && (
           <ReportesHistorial
@@ -1035,159 +1465,390 @@ export function App(): ReactElement {
         )}
 
         {pestana === 'venta' && (
-          <div className="grid gap-4 md:grid-cols-12">
-            <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-200 md:col-span-7">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Importe a cobrar
-                </span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                  Toques en esta venta: {toquesVentaActual}
-                </span>
-              </div>
+          <div className="space-y-4">
+            {/* Barra superior de Venta: Selector de Lista de Precios + Pistola / Buscador */}
+            <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Lista de Precios:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {listasPrecios.map((lp) => {
+                      const activa = lp.id === listaPrecioIdSeleccionada;
+                      return (
+                        <button
+                          key={lp.id}
+                          type="button"
+                          data-testid={`btn-lista-precio-${lp.nombre.toLowerCase()}`}
+                          onClick={() => {
+                            setListaPrecioIdSeleccionada(lp.id);
+                          }}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                            activa
+                              ? 'bg-blue-600 text-white shadow'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {lp.nombre} (+{lp.margenPct}%)
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-              <div
-                data-testid="visor-monto-venta"
-                className="mt-2 rounded-xl bg-slate-900 px-4 py-4 text-right text-4xl font-black tracking-tight text-white"
-              >
-                {formatearPesos(montoVentaFormateado)}
-              </div>
-
-              <div className="mt-3 grid grid-cols-5 gap-2">
-                {['200', '1000', '2600', '3300', '4700'].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    data-testid={`preset-${preset}`}
-                    onClick={() => {
-                      setMontoEnteroTeclado(preset);
-                      setToquesVentaActual((t) => t + 1);
-                    }}
-                    className="rounded-lg border border-blue-200 bg-blue-50 py-2 text-xs font-bold text-blue-900 hover:bg-blue-100"
-                  >
-                    $ {preset.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2.5">
-                {['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '00', 'C'].map(
-                  (tecla) => (
-                    <button
-                      key={tecla}
-                      type="button"
-                      data-testid={`tecla-${tecla}`}
-                      onClick={() => {
-                        setMontoEnteroTeclado((prev) =>
-                          agregarDigitoTeclado(prev, tecla),
-                        );
-                        setToquesVentaActual((t) => t + 1);
+                <div className="flex flex-1 items-center gap-2 min-w-[280px]">
+                  <div className="relative flex-1">
+                    <input
+                      data-testid="input-pistola-codigo"
+                      type="text"
+                      placeholder="Escanear con pistola o buscar código/artículo (Enter)..."
+                      value={busquedaProducto}
+                      onChange={(e) => {
+                        setBusquedaProducto(e.target.value);
                       }}
-                      className={`rounded-xl py-4 text-2xl font-extrabold shadow-xs transition active:scale-95 ${
-                        tecla === 'C'
-                          ? 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                          : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
-                      }`}
-                    >
-                      {tecla === 'C' ? 'Borrar' : tecla}
-                    </button>
-                  ),
-                )}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && busquedaProducto.trim()) {
+                          e.preventDefault();
+                          void agregarProductoPorCodigo(busquedaProducto);
+                        }
+                      }}
+                      className="w-full rounded-xl border-2 border-blue-400 bg-blue-50/40 px-3.5 py-2 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-blue-600 font-bold">
+                      🔫 Pistola lista
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="btn-agregar-codigo"
+                    disabled={buscandoProducto || !busquedaProducto.trim()}
+                    onClick={() => {
+                      void agregarProductoPorCodigo(busquedaProducto);
+                    }}
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {buscandoProducto ? 'Buscando...' : 'Agregar'}
+                  </button>
+                </div>
               </div>
+
+              {mensajePistola && (
+                <div
+                  data-testid="mensaje-pistola"
+                  className={`mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                    mensajePistola.startsWith('✓')
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {mensajePistola}
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-col justify-between rounded-2xl bg-white p-5 shadow-sm border border-slate-200 md:col-span-5">
-              <div className="space-y-5">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Medio de pago (1 toque)
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 gap-2">
-                    {contexto.mediosPago.map((mp) => {
-                      const activo = mp.id === medioPagoIdSeleccionado;
-                      return (
-                        <button
-                          key={mp.id}
-                          type="button"
-                          data-testid={`medio-${mp.nombre}`}
-                          onClick={() => {
-                            setMedioPagoIdSeleccionado(mp.id);
-                            setToquesVentaActual((t) => t + 1);
-                          }}
-                          className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left font-bold transition ${
-                            activo
-                              ? 'border-blue-600 bg-blue-50 text-blue-950'
-                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span>{mp.nombre}</span>
-                          <span className="text-xs font-semibold text-slate-500">
-                            {mp.esEfectivo ? 'Suma al cajón' : 'No suma al cajón'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+            <div className="grid gap-4 md:grid-cols-12">
+              <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-200 md:col-span-7">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    {itemsCarrito.length > 0
+                      ? `Detalle de artículos (${itemsCarrito.length})`
+                      : 'Importe libre en 1 toque'}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                    Toques en esta venta: {toquesVentaActual}
+                  </span>
                 </div>
 
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Rubro (1 toque)
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {contexto.rubros.map((r) => {
-                      const activo = r.id === rubroIdSeleccionado;
-                      return (
-                        <button
-                          key={r.id}
-                          type="button"
-                          data-testid={`rubro-${r.nombre}`}
-                          onClick={() => {
-                            setRubroIdSeleccionado(r.id);
-                            setToquesVentaActual((t) => t + 1);
-                          }}
-                          className={`rounded-xl border-2 px-3.5 py-2 text-sm font-bold transition ${
-                            activo
-                              ? 'border-amber-500 bg-amber-100 text-amber-950'
-                              : 'border-slate-200 bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          {r.nombre}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <div
+                  data-testid="visor-monto-venta"
+                  className="mt-2 rounded-xl bg-slate-900 px-4 py-4 text-right text-4xl font-black tracking-tight text-white"
+                >
+                  {formatearPesos(montoVentaFormateado)}
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="input-descripcion-venta"
-                    className="block text-xs font-bold uppercase tracking-wider text-slate-500"
-                  >
-                    Descripción (opcional)
-                  </label>
-                  <input
-                    id="input-descripcion-venta"
-                    data-testid="input-descripcion-venta"
-                    type="text"
-                    placeholder="Ej: Tornillos autoperforantes / cable 2.5mm"
-                    value={descripcionVenta}
-                    onChange={(e) => {
-                      setDescripcionVenta(e.target.value);
-                    }}
-                    className="mt-1 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm"
-                  />
-                </div>
+                {itemsCarrito.length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-600">
+                        Ítems en el carrito (descuentan stock al cobrar)
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="btn-vaciar-carrito"
+                        onClick={() => {
+                          setItemsCarrito([]);
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:underline"
+                      >
+                        Vaciar carrito
+                      </button>
+                    </div>
+
+                    <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 border rounded-xl border-slate-200">
+                      {itemsCarrito.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-3 bg-white hover:bg-slate-50 flex flex-col gap-2"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-sm font-bold text-slate-900">
+                                {item.nombre}
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                Cód: {item.codigo ?? 'S/C'} · Unit: {formatearPesos(item.precioUnitario)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                eliminarItemCarrito(item.id);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1"
+                              title="Quitar"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            {item.permiteFraccion ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-slate-500">Unidad:</span>
+                                <select
+                                  value={item.unidad}
+                                  onChange={(e) => {
+                                    cambiarUnidadItem(
+                                      item.id,
+                                      e.target.value as 'principal' | 'secundaria',
+                                    );
+                                  }}
+                                  className="rounded border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-800"
+                                >
+                                  <option value="principal">
+                                    Principal (x{item.factorConversion})
+                                  </option>
+                                  <option value="secundaria">
+                                    Fraccionada (1 u.)
+                                  </option>
+                                </select>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 font-semibold">
+                                {item.nombreUnidad}
+                              </span>
+                            )}
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-500">Cant:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const c = Math.max(
+                                    0.001,
+                                    (parseFloat(item.cantidad) || 1) - 1,
+                                  );
+                                  actualizarCantidadItem(
+                                    item.id,
+                                    c.toFixed(3),
+                                  );
+                                }}
+                                className="h-6 w-6 rounded bg-slate-200 font-black text-slate-700 hover:bg-slate-300"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="text"
+                                value={item.cantidad}
+                                onChange={(e) => {
+                                  actualizarCantidadItem(
+                                    item.id,
+                                    e.target.value,
+                                  );
+                                }}
+                                className="w-14 rounded border border-slate-300 px-1.5 py-0.5 text-center font-bold text-slate-900"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const c =
+                                    (parseFloat(item.cantidad) || 0) + 1;
+                                  actualizarCantidadItem(
+                                    item.id,
+                                    c.toFixed(3),
+                                  );
+                                }}
+                                className="h-6 w-6 rounded bg-slate-200 font-black text-slate-700 hover:bg-slate-300"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-500">Desc%:</span>
+                              <input
+                                type="text"
+                                placeholder="0"
+                                value={item.descuentoPct}
+                                onChange={(e) => {
+                                  actualizarDescuentoPctItem(
+                                    item.id,
+                                    e.target.value,
+                                  );
+                                }}
+                                className="w-10 rounded border border-slate-300 px-1 py-0.5 text-center font-bold text-slate-900"
+                              />
+                            </div>
+
+                            <div className="font-extrabold text-slate-900 text-sm">
+                              {formatearPesos(item.subtotal)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-3 grid grid-cols-5 gap-2">
+                      {['200', '1000', '2600', '3300', '4700'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          data-testid={`preset-${preset}`}
+                          onClick={() => {
+                            setMontoEnteroTeclado(preset);
+                            setToquesVentaActual((t) => t + 1);
+                          }}
+                          className="rounded-lg border border-blue-200 bg-blue-50 py-2 text-xs font-bold text-blue-900 hover:bg-blue-100"
+                        >
+                          $ {preset.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2.5">
+                      {['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '00', 'C'].map(
+                        (tecla) => (
+                          <button
+                            key={tecla}
+                            type="button"
+                            data-testid={`tecla-${tecla}`}
+                            onClick={() => {
+                              setMontoEnteroTeclado((prev) =>
+                                agregarDigitoTeclado(prev, tecla),
+                              );
+                              setToquesVentaActual((t) => t + 1);
+                            }}
+                            className={`rounded-xl py-4 text-2xl font-extrabold shadow-xs transition active:scale-95 ${
+                              tecla === 'C'
+                                ? 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                                : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
+                            }`}
+                          >
+                            {tecla === 'C' ? 'Borrar' : tecla}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
-              <button
-                type="button"
-                data-testid="btn-cobrar-venta"
-                onClick={() => void registrarVentaRapida()}
-                className="mt-6 w-full rounded-2xl bg-emerald-600 py-5 text-xl font-black text-white shadow-lg transition hover:bg-emerald-700 active:scale-98"
-              >
-                COBRAR {formatearPesos(montoVentaFormateado)}
-              </button>
+              <div className="flex flex-col justify-between rounded-2xl bg-white p-5 shadow-sm border border-slate-200 md:col-span-5">
+                <div className="space-y-5">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Medio de pago (1 toque)
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      {contexto.mediosPago.map((mp) => {
+                        const activo = mp.id === medioPagoIdSeleccionado;
+                        return (
+                          <button
+                            key={mp.id}
+                            type="button"
+                            data-testid={`medio-${mp.nombre}`}
+                            onClick={() => {
+                              setMedioPagoIdSeleccionado(mp.id);
+                              setToquesVentaActual((t) => t + 1);
+                            }}
+                            className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left font-bold transition ${
+                              activo
+                                ? 'border-blue-600 bg-blue-50 text-blue-950'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span>{mp.nombre}</span>
+                            <span className="text-xs font-semibold text-slate-500">
+                              {mp.esEfectivo ? 'Suma al cajón' : 'No suma al cajón'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Rubro (1 toque)
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {contexto.rubros.map((r) => {
+                        const activo = r.id === rubroIdSeleccionado;
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            data-testid={`rubro-${r.nombre}`}
+                            onClick={() => {
+                              setRubroIdSeleccionado(r.id);
+                              setToquesVentaActual((t) => t + 1);
+                            }}
+                            className={`rounded-xl border-2 px-3.5 py-2 text-sm font-bold transition ${
+                              activo
+                                ? 'border-amber-500 bg-amber-100 text-amber-950'
+                                : 'border-slate-200 bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            {r.nombre}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="input-descripcion-venta"
+                      className="block text-xs font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      Descripción (opcional)
+                    </label>
+                    <input
+                      id="input-descripcion-venta"
+                      data-testid="input-descripcion-venta"
+                      type="text"
+                      placeholder="Ej: Tornillos autoperforantes / cable 2.5mm"
+                      value={descripcionVenta}
+                      onChange={(e) => {
+                        setDescripcionVenta(e.target.value);
+                      }}
+                      className="mt-1 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="btn-cobrar-venta"
+                  onClick={() => void registrarVentaRapida()}
+                  className="mt-6 w-full rounded-2xl bg-emerald-600 py-5 text-xl font-black text-white shadow-lg transition hover:bg-emerald-700 active:scale-98"
+                >
+                  COBRAR {formatearPesos(montoVentaFormateado)}
+                </button>
+              </div>
             </div>
           </div>
         )}

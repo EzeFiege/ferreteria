@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { agregarDigitoTeclado, formatearPesos } from './App.js';
+import {
+  agregarDigitoTeclado,
+  calcularSubtotalCentavos,
+  formatearPesos,
+} from './App.js';
 import {
   encolarOperacion,
   limpiarCola,
@@ -17,6 +21,20 @@ describe('@ferreteria/web utilidades de formato, teclado y cola offline', () => 
     expect(formatearPesos('1234.50')).toBe('$ 1.234,50');
     expect(formatearPesos('2600')).toBe('$ 2.600,00');
     expect(formatearPesos('-50.00')).toBe('- $ 50,00');
+  });
+
+  it('calcula subtotales exactos en centavos con cantidades decimales y descuentos', () => {
+    // 2.5 unidades a $ 1.000,00 sin descuento = $ 2.500,00 -> 250000 centavos
+    const subtotalSimple = calcularSubtotalCentavos('1000.00', 2.5, '0', '0.00');
+    expect(subtotalSimple).toBe(250000n);
+
+    // 1 unidad a $ 10.000,00 con 15% de descuento = $ 8.500,00 -> 850000 centavos
+    const subtotalConPct = calcularSubtotalCentavos('10000.00', 1, '15', '0.00');
+    expect(subtotalConPct).toBe(850000n);
+
+    // 1 unidad a $ 5.000,00 con $ 500,00 de descuento en monto = $ 4.500,00 -> 450000 centavos
+    const subtotalConMonto = calcularSubtotalCentavos('5000.00', 1, '0', '500.00');
+    expect(subtotalConMonto).toBe(450000n);
   });
 
   it('opera el teclado numérico de mostrador en pocos toques', () => {
