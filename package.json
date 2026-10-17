@@ -1,0 +1,27 @@
+{
+  "name": "ferreteria",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @ferreteria/shared build && pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "pnpm --filter @ferreteria/shared build && vitest run",
+    "db:migrate": "pnpm --filter @ferreteria/api db:migrate",
+    "db:backup:verify": "pnpm --filter @ferreteria/api db:backup:verify"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.19.0",
+    "globals": "^15.14.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.22.0",
+    "vitest": "^3.0.4"
+  }
+}

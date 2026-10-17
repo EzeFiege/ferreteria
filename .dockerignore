@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+backups
+.git
+.env
+.env.*
+!.env.example
+apps/web
+*.log

@@ -1,0 +1,28 @@
+{
+  "name": "@ferreteria/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:migrate": "tsx src/db/cli-migrate.ts",
+    "db:backup:verify": "tsx src/db/cli-backup-verify.ts"
+  },
+  "dependencies": {
+    "@ferreteria/shared": "workspace:*",
+    "drizzle-orm": "^0.39.3",
+    "fastify": "^5.2.1",
+    "pg": "^8.13.3",
+    "pino": "^9.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10.18.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.2"
+  }
+}
