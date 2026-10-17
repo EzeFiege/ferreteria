@@ -12,6 +12,7 @@
     "db:backup:verify": "tsx src/db/cli-backup-verify.ts"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.6",
     "@ferreteria/shared": "workspace:*",
     "drizzle-orm": "^0.39.3",
     "fastify": "^5.2.1",

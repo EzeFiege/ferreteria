@@ -1,4 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyStatic from '@fastify/static';
+import fs from 'node:fs';
+import path from 'node:path';
 import pg from 'pg';
 import { rolUsuarioSchema } from '@ferreteria/shared';
 import type { TokenVerifier } from './auth.js';
@@ -102,6 +105,34 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     pool,
     verifyToken: options.verifyToken,
   });
+
+  const webDistPath =
+    process.env['WEB_DIST_PATH'] ??
+    path.resolve(import.meta.dirname, '../../web/dist');
+
+  if (
+    fs.existsSync(webDistPath) &&
+    fs.existsSync(path.join(webDistPath, 'index.html'))
+  ) {
+    void app.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: '/',
+    });
+
+    app.setNotFoundHandler((request, reply) => {
+      if (
+        request.url.startsWith('/api') ||
+        request.url.startsWith('/health')
+      ) {
+        return reply.code(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Ruta ${request.method}:${request.url} no encontrada`,
+        });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   return app;
 }
