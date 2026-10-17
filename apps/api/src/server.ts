@@ -62,6 +62,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     if (request.method === 'OPTIONS') {
       return await reply.code(204).send();
     }
+    if (request.url.startsWith('/api/') || request.url === '/api') {
+      const stripped = request.url.replace(/^\/api(?=\/|\?|$)/, '') || '/';
+      request.raw.url = stripped;
+    }
   });
 
   app.addHook('onError', (request, reply, error, done) => {
@@ -120,10 +124,21 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     });
 
     app.setNotFoundHandler((request, reply) => {
-      if (
-        request.url.startsWith('/api') ||
-        request.url.startsWith('/health')
-      ) {
+      const urlRaw = request.raw.url ?? request.url;
+      const esRutaApi =
+        urlRaw.startsWith('/turnos') ||
+        urlRaw.startsWith('/cajas') ||
+        urlRaw.startsWith('/movimientos') ||
+        urlRaw.startsWith('/ventas') ||
+        urlRaw.startsWith('/productos') ||
+        urlRaw.startsWith('/listas-precios') ||
+        urlRaw.startsWith('/stock') ||
+        urlRaw.startsWith('/reportes') ||
+        urlRaw.startsWith('/configuracion') ||
+        urlRaw.startsWith('/contexto-mostrador') ||
+        urlRaw.startsWith('/health');
+
+      if (esRutaApi) {
         return reply.code(404).send({
           statusCode: 404,
           error: 'Not Found',

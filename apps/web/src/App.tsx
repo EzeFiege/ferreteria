@@ -764,32 +764,38 @@ export function App(): ReactElement {
       return;
     }
     setUltimoArqueoCerrado(null);
-    const res = await fetch(apiUrl('/api/turnos/abrir'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${operadorActivo.token}`,
-      },
-      body: JSON.stringify({
-        cajaId: contexto.caja.id,
-        efectivoInicial: efectivoInicialInput,
-      }),
-    });
+    try {
+      const res = await fetch(apiUrl('/api/turnos/abrir'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${operadorActivo.token}`,
+        },
+        body: JSON.stringify({
+          cajaId: contexto.caja.id,
+          efectivoInicial: efectivoInicialInput,
+        }),
+      });
 
-    if (!res.ok) {
-      const errData = (await res.json()) as { error?: string };
-      setAviso(errData.error ?? 'No se pudo abrir el turno');
-      return;
+      if (!res.ok) {
+        const errData = (await res.json()) as { error?: string };
+        setAviso(errData.error ?? 'No se pudo abrir el turno');
+        return;
+      }
+
+      const data = (await res.json()) as {
+        turno: { id: string; efectivoInicial: string };
+      };
+      setTurnoId(data.turno.id);
+      await cargarResumenTurno(data.turno.id, operadorActivo.token);
+      setAviso(
+        `Turno abierto con efectivo inicial ${formatearPesos(data.turno.efectivoInicial)}`,
+      );
+    } catch (err: unknown) {
+      setAviso(
+        `Error de red al abrir turno: ${err instanceof Error ? err.message : 'Error desconocido'}`,
+      );
     }
-
-    const data = (await res.json()) as {
-      turno: { id: string; efectivoInicial: string };
-    };
-    setTurnoId(data.turno.id);
-    await cargarResumenTurno(data.turno.id, operadorActivo.token);
-    setAviso(
-      `Turno abierto con efectivo inicial ${formatearPesos(data.turno.efectivoInicial)}`,
-    );
   };
 
   const registrarVentaRapida = async (): Promise<void> => {
@@ -1103,107 +1109,6 @@ export function App(): ReactElement {
     );
   }
 
-  if (!turnoId) {
-    return (
-      <main className="min-h-screen bg-slate-100 p-4 md:p-8">
-        <div className="mx-auto max-w-lg rounded-2xl bg-white p-6 shadow-md border border-slate-200">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">
-                Apertura de Turno — {contexto.caja.nombre}
-              </h1>
-              <p className="text-xs text-slate-500">
-                Operador: <strong>{operadorActivo.nombre}</strong> ({operadorActivo.rol})
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setOperadorActivo(null);
-              }}
-              className="text-xs font-medium text-slate-500 underline"
-            >
-              Cambiar operador
-            </button>
-          </div>
-
-          {ultimoArqueoCerrado && (
-            <div
-              data-testid="resumen-ultimo-arqueo"
-              className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4"
-            >
-              <div className="text-sm font-bold text-emerald-900">
-                Último turno cerrado con arqueo
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-emerald-800">
-                <div>
-                  Esperado:{' '}
-                  <strong>
-                    {formatearPesos(ultimoArqueoCerrado.efectivoEsperado)}
-                  </strong>
-                </div>
-                <div>
-                  Contado:{' '}
-                  <strong>
-                    {formatearPesos(
-                      ultimoArqueoCerrado.efectivoContado ?? '0.00',
-                    )}
-                  </strong>
-                </div>
-                <div>
-                  Diferencia:{' '}
-                  <strong data-testid="arqueo-cerrado-diferencia">
-                    {formatearPesos(ultimoArqueoCerrado.diferencia ?? '0.00')}
-                  </strong>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-5 rounded-xl bg-amber-50 p-4 border border-amber-200">
-            <div className="text-xs font-semibold uppercase text-amber-800">
-              Efectivo contado en el último cierre (sugerido)
-            </div>
-            <div
-              data-testid="efectivo-sugerido"
-              className="mt-1 text-2xl font-black text-amber-950"
-            >
-              {formatearPesos(efectivoSugerido)}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label
-              htmlFor="input-efectivo-inicial"
-              className="block text-sm font-semibold text-slate-700"
-            >
-              Efectivo inicial en el cajón ($)
-            </label>
-            <input
-              id="input-efectivo-inicial"
-              data-testid="input-efectivo-inicial"
-              type="text"
-              value={efectivoInicialInput}
-              onChange={(e) => {
-                setEfectivoInicialInput(e.target.value);
-              }}
-              className="mt-1 w-full rounded-xl border-2 border-slate-300 px-4 py-3 text-xl font-bold text-slate-900"
-            />
-          </div>
-
-          <button
-            type="button"
-            data-testid="btn-abrir-turno"
-            onClick={() => void abrirTurno()}
-            className="mt-6 w-full rounded-xl bg-blue-600 py-4 text-lg font-bold text-white shadow hover:bg-blue-700"
-          >
-            Abrir turno de caja
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen bg-slate-100 pb-10">
       <header className="bg-slate-900 text-white px-4 py-3 shadow">
@@ -1213,13 +1118,22 @@ export function App(): ReactElement {
               {contexto.negocioNombre} · {contexto.caja.nombre}
             </div>
             <div className="text-base font-bold">
-              Turno abierto · Cajón esperado:{' '}
-              <span
-                data-testid="header-efectivo-esperado"
-                className="text-emerald-400"
-              >
-                {formatearPesos(efectivoEsperadoTotal)}
-              </span>
+              {turnoId ? (
+                <>
+                  Turno abierto · Cajón esperado:{' '}
+                  <span
+                    data-testid="header-efectivo-esperado"
+                    className="text-emerald-400"
+                  >
+                    {formatearPesos(efectivoEsperadoTotal)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-amber-300 font-bold">
+                  Turno cerrado · Cajón sugerido:{' '}
+                  {formatearPesos(efectivoSugerido)}
+                </span>
+              )}
             </div>
           </div>
 
@@ -1465,7 +1379,92 @@ export function App(): ReactElement {
         )}
 
         {pestana === 'venta' && (
-          <div className="space-y-4">
+          !turnoId ? (
+            <div className="mx-auto max-w-lg rounded-2xl bg-white p-6 shadow-md border border-slate-200">
+              <div className="border-b border-slate-100 pb-4">
+                <h2 className="text-xl font-bold text-slate-900">
+                  Apertura de Turno — {contexto.caja.nombre}
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Operador: <strong>{operadorActivo.nombre}</strong> ({operadorActivo.rol})
+                </p>
+              </div>
+
+              {ultimoArqueoCerrado && (
+                <div
+                  data-testid="resumen-ultimo-arqueo"
+                  className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+                >
+                  <div className="text-sm font-bold text-emerald-900">
+                    Último turno cerrado con arqueo
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-emerald-800">
+                    <div>
+                      Esperado:{' '}
+                      <strong>
+                        {formatearPesos(ultimoArqueoCerrado.efectivoEsperado)}
+                      </strong>
+                    </div>
+                    <div>
+                      Contado:{' '}
+                      <strong>
+                        {formatearPesos(
+                          ultimoArqueoCerrado.efectivoContado ?? '0.00',
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      Diferencia:{' '}
+                      <strong data-testid="arqueo-cerrado-diferencia">
+                        {formatearPesos(ultimoArqueoCerrado.diferencia ?? '0.00')}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 rounded-xl bg-amber-50 p-4 border border-amber-200">
+                <div className="text-xs font-semibold uppercase text-amber-800">
+                  Efectivo contado en el último cierre (sugerido)
+                </div>
+                <div
+                  data-testid="efectivo-sugerido"
+                  className="mt-1 text-2xl font-black text-amber-950"
+                >
+                  {formatearPesos(efectivoSugerido)}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label
+                  htmlFor="input-efectivo-inicial"
+                  className="block text-sm font-semibold text-slate-700"
+                >
+                  Efectivo inicial en el cajón ($)
+                </label>
+                <input
+                  id="input-efectivo-inicial"
+                  data-testid="input-efectivo-inicial"
+                  type="text"
+                  value={efectivoInicialInput}
+                  onChange={(e) => {
+                    setEfectivoInicialInput(e.target.value);
+                  }}
+                  className="mt-1 w-full rounded-xl border-2 border-slate-300 px-4 py-3 text-xl font-bold text-slate-900"
+                />
+              </div>
+
+              <button
+                type="button"
+                data-testid="btn-abrir-turno"
+                onClick={() => void abrirTurno()}
+                className="mt-6 w-full rounded-xl bg-blue-600 py-4 text-lg font-bold text-white shadow hover:bg-blue-700"
+              >
+                Abrir turno de caja
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
             {/* Barra superior de Venta: Selector de Lista de Precios + Pistola / Buscador */}
             <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1851,10 +1850,29 @@ export function App(): ReactElement {
               </div>
             </div>
           </div>
-        )}
+        )
+      )}
 
         {pestana === 'egreso' && (
-          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+          !turnoId ? (
+            <div className="rounded-2xl bg-white p-8 text-center shadow-sm border border-slate-200">
+              <div className="text-4xl mb-2">🔒</div>
+              <h3 className="text-lg font-bold text-slate-800">Turno de caja cerrado</h3>
+              <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                Para registrar egresos o gastos del turno, primero abrí un turno en la pestaña <strong>1. Venta Rápida</strong>.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPestana('venta');
+                }}
+                className="mt-4 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+              >
+                Ir a apertura de turno
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
             <h2 className="text-lg font-bold text-slate-900">
               Registrar Egreso de Caja
             </h2>
@@ -1940,10 +1958,29 @@ export function App(): ReactElement {
               Registrar Egreso
             </button>
           </div>
-        )}
+        )
+      )}
 
         {pestana === 'arqueo' && (
-          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+          !turnoId ? (
+            <div className="rounded-2xl bg-white p-8 text-center shadow-sm border border-slate-200">
+              <div className="text-4xl mb-2">📋</div>
+              <h3 className="text-lg font-bold text-slate-800">No hay un turno abierto para arquear</h3>
+              <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                El turno actual se encuentra cerrado. Podés abrir uno nuevo en la pestaña <strong>1. Venta Rápida</strong> o consultar el historial en <strong>4. Reportes e Historial</strong>.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPestana('venta');
+                }}
+                className="mt-4 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+              >
+                Ir a apertura de turno
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
@@ -2049,7 +2086,8 @@ export function App(): ReactElement {
               Confirmar Arqueo y Cerrar Turno
             </button>
           </div>
-        )}
+        )
+      )}
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
