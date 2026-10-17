@@ -55,7 +55,11 @@ describe('API & Migraciones de base de datos', () => {
       .filter((f) => f.endsWith('.sql'))
       .sort((a, b) => a.localeCompare(b));
 
-    expect(files).toEqual(['001_core_caja.sql', '002_rol_app_user.sql']);
+    expect(files).toEqual([
+      '001_core_caja.sql',
+      '002_rol_app_user.sql',
+      '003_catalogo_stock.sql',
+    ]);
 
     const sql002 = await readFile(
       path.join(migrationsDir, '002_rol_app_user.sql'),
@@ -77,7 +81,11 @@ describe('API & Migraciones de base de datos', () => {
       connectionString: dbUrl,
       appUserPassword: 'app_test_password',
     });
-    expect(firstRun).toEqual(['001_core_caja.sql', '002_rol_app_user.sql']);
+    expect(firstRun).toEqual([
+      '001_core_caja.sql',
+      '002_rol_app_user.sql',
+      '003_catalogo_stock.sql',
+    ]);
 
     // Ejecutar por segunda vez debe ser idempotente (0 nuevas migraciones)
     const secondRun = await runMigrations({

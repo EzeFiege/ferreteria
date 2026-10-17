@@ -116,6 +116,13 @@ export const itemVentaInputSchema = z.object({
   descripcion: z.string().min(1).max(500),
   cantidad: cantidadDecimalSchema,
   precioUnit: montoNoNegativoSchema,
+  unidad: z.enum(['principal', 'secundaria']).optional(),
+  descuentoPct: z
+    .string()
+    .regex(/^\d{1,3}(\.\d{1,2})?$/)
+    .optional(),
+  descuentoMonto: montoNoNegativoSchema.optional(),
+  subtotal: montoNoNegativoSchema.optional(),
 });
 export type ItemVentaInput = z.infer<typeof itemVentaInputSchema>;
 
@@ -230,5 +237,73 @@ export const guardarCategoriaSchema = z.object({
   tipo: z.enum(['ingreso', 'egreso']),
 });
 export type GuardarCategoriaInput = z.infer<typeof guardarCategoriaSchema>;
+
+/**
+ * Esquemas para Fase 2 — Catálogo de artículos, fraccionamiento, precios y stock vivo.
+ */
+export const guardarProductoSchema = z.object({
+  id: uuidSchema.optional(),
+  rubroId: uuidSchema.optional(),
+  codigo: z.string().trim().min(1).max(100),
+  nombre: z.string().trim().min(1).max(255),
+  marca: z.string().trim().max(100).optional(),
+  descripcion: z.string().max(1000).optional(),
+  imagenUrl: z.string().url().max(1000).optional().or(z.literal('')),
+  codigoQr: z.string().trim().max(255).optional(),
+  costoBase: montoNoNegativoSchema,
+  unidadPrincipal: z.string().trim().min(1).max(30).default('un'),
+  unidadSecundaria: z.string().trim().max(30).optional().or(z.literal('')),
+  factorConversion: cantidadDecimalSchema.default('1.000'),
+  permiteFraccion: z.boolean().default(false),
+  stockMinimo: cantidadDecimalSchema.default('0.000'),
+  activo: z.boolean().default(true),
+  codigosBarra: z.array(z.string().trim().min(1).max(100)).optional(),
+});
+export type GuardarProductoInput = z.infer<typeof guardarProductoSchema>;
+
+export const guardarListaPrecioSchema = z.object({
+  id: uuidSchema.optional(),
+  nombre: z.string().trim().min(1).max(100),
+  margenPct: comisionPctSchema,
+  activo: z.boolean().optional(),
+  orden: z.number().int().min(1).max(100).optional(),
+});
+export type GuardarListaPrecioInput = z.infer<typeof guardarListaPrecioSchema>;
+
+export const ajusteStockSchema = z.object({
+  id: uuidSchema.optional(),
+  productoId: uuidSchema,
+  tipo: z.enum([
+    'ajuste_sobrante',
+    'ajuste_faltante',
+    'merma_rotura',
+    'ingreso_compra',
+    'devolucion',
+  ]),
+  cantidad: cantidadDecimalSchema,
+  unidad: z.enum(['principal', 'secundaria']).default('principal'),
+  costoUnitario: montoNoNegativoSchema.optional(),
+  notas: z.string().max(500).optional(),
+});
+export type AjusteStockInput = z.infer<typeof ajusteStockSchema>;
+
+export const lookupEanResultSchema = z.object({
+  encontrado: z.boolean(),
+  origen: z.enum(['local', 'mercadolibre', 'no_encontrado']),
+  codigoBarra: z.string(),
+  nombre: z.string().optional(),
+  marca: z.string().optional(),
+  imagenUrl: z.string().optional(),
+  rubroSugerido: z.string().optional(),
+  productoId: uuidSchema.optional(),
+  codigo: z.string().optional(),
+  costoBase: montoDecimalSchema.optional(),
+  stockActualBase: cantidadDecimalSchema.optional(),
+  unidadPrincipal: z.string().optional(),
+  unidadSecundaria: z.string().optional(),
+  permiteFraccion: z.boolean().optional(),
+  precios: z.record(z.string(), z.string()).optional(),
+});
+export type LookupEanResult = z.infer<typeof lookupEanResultSchema>;
 
 

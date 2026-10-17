@@ -111,13 +111,27 @@ Estado:
 
 ---
 
-## Después del piloto (no empezar antes)
+## Fase 2 — Catálogo, fraccionamiento y stock vivo (Backend completado ✅)
+
+Objetivo: control de stock en tiempo real por kardex inmutable, fraccionamiento de unidades (ej. metro/rollo), listas de precios por margen sobre costo y lectura con pistola/QR.
+
+Estado:
+- [x] Migración `003_catalogo_stock.sql`: tablas `producto`, `producto_codigo_barra`, `lista_precio`, `movimiento_stock` inmutable con trigger, vistas `v_stock_actual` y `v_precios_producto`, y RLS activo.
+- [x] Esquemas compartidos en `packages/shared`: productos, códigos de barra, fraccionamiento, listas de precio y `itemVentaInputSchema` enriquecido con `productoId`, `unidad` y descuentos.
+- [x] Servicio de autocompletado y lookup EAN (`catalog-lookup.ts`) con integración a la API de Mercado Libre.
+- [x] Endpoints en `apps/api/src/routes/productos.ts` (`GET /productos/lookup-ean/:codigo`, `GET /productos`, `POST /productos`, `PUT /productos/:id`, `POST /stock/ajuste`, `GET/PUT /listas-precios`).
+- [x] Integración en `apps/api/src/routes/caja.ts`: egreso automático de stock al vender ítems con `productoId` (descontando fraccionado según `factor_conversion`).
+- [x] Suite de 8 tests de integración (`apps/api/src/routes/productos.test.ts`) pasando al 100% contra PostgreSQL 16 real.
+
+---
+
+## Próximas Fases
 
 | Fase | Contenido |
 |---|---|
-| 2. Catálogo y stock | Productos, listas de precios, venta por ítem y por fracción, stock por movimientos, actualización masiva de precios por proveedor |
-| 3. Clientes y proveedores | Cuenta corriente de clientes (por ejemplo, contratistas), cobranzas, compras, cuentas a pagar, cheques (incluidos los diferidos) |
-| 4. Flujo proyectado | Acreditaciones de tarjeta/QR, cheques a fecha, vencimientos, margen por rubro |
-| 5. Expansión | Facturación electrónica (verificar los requisitos vigentes de ARCA al llegar), multisucursal, integraciones, asistente con IA de solo lectura para consultas sobre los reportes |
-
-Regla para la Fase 5 con IA: el asistente consulta únicamente vistas de reporte con un rol de solo lectura y RLS; jamás escribe en el libro de movimientos.
+| 2.1 Web Catálogo | Pantalla de gestión de productos con escáner de pistola, autocompletado EAN e impresión de etiquetas QR/barras |
+| 3. Clientes y CRM | Ficha de clientes, cuenta corriente inmutable, límites de crédito y cobranzas |
+| 4. Compras y Proveedores | Proveedores, listas de costo, órdenes de compra y cuentas a pagar |
+| 5. Tesorería y Flujo | Cartera de cheques/eCheqs, acreditaciones de tarjetas/QR y cash flow proyectado |
+| 6. Facturación Fiscal | Comprobantes electrónicos A, B, C con ARCA y contingencia offline |
+| 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |

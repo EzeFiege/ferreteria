@@ -4,6 +4,7 @@ import { rolUsuarioSchema } from '@ferreteria/shared';
 import type { TokenVerifier } from './auth.js';
 import { registerCajaRoutes } from './routes/caja.js';
 import { registerConfiguracionRoutes } from './routes/configuracion.js';
+import { registerProductosRoutes } from './routes/productos.js';
 import { registerReportesRoutes } from './routes/reportes.js';
 
 const { Pool } = pg;
@@ -93,6 +94,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   });
 
   registerConfiguracionRoutes(app, {
+    pool,
+    verifyToken: options.verifyToken,
+  });
+
+  registerProductosRoutes(app, {
     pool,
     verifyToken: options.verifyToken,
   });

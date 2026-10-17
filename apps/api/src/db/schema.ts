@@ -133,3 +133,79 @@ export const movimiento = pgTable('movimiento', {
   creadoPor: uuid('creado_por').notNull(),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const listaPrecio = pgTable('lista_precio', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  nombre: text('nombre').notNull(),
+  margenPct: numeric('margen_pct', { precision: 5, scale: 2 })
+    .notNull()
+    .default('0.00'),
+  activo: boolean('activo').notNull().default(true),
+  orden: integer('orden').notNull().default(1),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const producto = pgTable('producto', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  rubroId: uuid('rubro_id'),
+  codigo: text('codigo').notNull(),
+  nombre: text('nombre').notNull(),
+  marca: text('marca'),
+  descripcion: text('descripcion'),
+  imagenUrl: text('imagen_url'),
+  codigoQr: text('codigo_qr'),
+  costoBase: numeric('costo_base', { precision: 14, scale: 2 })
+    .notNull()
+    .default('0.00'),
+  unidadPrincipal: text('unidad_principal').notNull().default('un'),
+  unidadSecundaria: text('unidad_secundaria'),
+  factorConversion: numeric('factor_conversion', { precision: 14, scale: 3 })
+    .notNull()
+    .default('1.000'),
+  permiteFraccion: boolean('permite_fraccion').notNull().default(false),
+  stockMinimo: numeric('stock_minimo', { precision: 14, scale: 3 })
+    .notNull()
+    .default('0.000'),
+  activo: boolean('activo').notNull().default(true),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const productoCodigoBarra = pgTable('producto_codigo_barra', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  codigoBarra: text('codigo_barra').notNull(),
+  esPrincipal: boolean('es_principal').notNull().default(true),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const movimientoStock = pgTable('movimiento_stock', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  turnoId: uuid('turno_id'),
+  ventaId: uuid('venta_id'),
+  tipo: text('tipo')
+    .$type<
+      | 'ingreso_compra'
+      | 'egreso_venta'
+      | 'ajuste_sobrante'
+      | 'ajuste_faltante'
+      | 'merma_rotura'
+      | 'devolucion'
+    >()
+    .notNull(),
+  sentido: text('sentido').$type<'in' | 'out'>().notNull(),
+  cantidad: numeric('cantidad', { precision: 14, scale: 3 }).notNull(),
+  unidad: text('unidad').notNull(),
+  cantidadBase: numeric('cantidad_base', { precision: 14, scale: 3 }).notNull(),
+  costoUnitario: numeric('costo_unitario', { precision: 14, scale: 2 })
+    .notNull()
+    .default('0.00'),
+  notas: text('notas'),
+  revierteId: uuid('revierte_id'),
+  creadoPor: uuid('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});

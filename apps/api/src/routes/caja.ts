@@ -25,6 +25,8 @@ import {
   categoria,
   medioPago,
   movimiento,
+  movimientoStock,
+  producto,
   rubro,
   turnoCaja,
   venta,
@@ -395,6 +397,42 @@ export function registerCajaRoutes(
                 precioUnit: item.precioUnit,
               })),
             );
+
+            // Registro inmutable de egreso de stock para ítems vinculados a producto
+            for (const item of body.items) {
+              if (item.productoId) {
+                const [prod] = await db
+                  .select()
+                  .from(producto)
+                  .where(eq(producto.id, item.productoId));
+
+                if (prod) {
+                  let cantBase = Number(item.cantidad);
+                  if (item.unidad === 'secundaria') {
+                    const factor = Number(prod.factorConversion);
+                    cantBase = factor > 0 ? cantBase / factor : cantBase;
+                  }
+
+                  await db.insert(movimientoStock).values({
+                    negocioId: claims.negocioId,
+                    productoId: item.productoId,
+                    turnoId: body.turnoId,
+                    ventaId: body.id,
+                    tipo: 'egreso_venta',
+                    sentido: 'out',
+                    cantidad: item.cantidad,
+                    unidad:
+                      item.unidad === 'secundaria'
+                        ? prod.unidadSecundaria ?? 'un'
+                        : prod.unidadPrincipal,
+                    cantidadBase: cantBase.toFixed(3),
+                    costoUnitario: prod.costoBase,
+                    notas: `Venta mostrador ${body.id}`,
+                    creadoPor: claims.usuarioId,
+                  });
+                }
+              }
+            }
           }
 
           for (const pago of body.pagos) {
