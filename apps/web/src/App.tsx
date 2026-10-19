@@ -20,6 +20,7 @@ import {
   type ClienteAutorizadoItem,
 } from './ClientesCtaCte.js';
 import { ComprasProveedores } from './ComprasProveedores.js';
+import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 
 export interface ItemCarrito {
   id: string;
@@ -246,6 +247,7 @@ export function App(): ReactElement {
     | 'catalogo'
     | 'clientes'
     | 'compras'
+    | 'tesoreria'
   >('venta');
 
   // Cliente para venta rápida en mostrador
@@ -1462,7 +1464,29 @@ export function App(): ReactElement {
           >
             8. Compras y Proveedores
           </button>
+          <button
+            type="button"
+            data-testid="tab-tesoreria"
+            onClick={() => {
+              setPestana('tesoreria');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'tesoreria'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            9. Tesorería y Flujo
+          </button>
         </nav>
+
+        {pestana === 'tesoreria' && (
+          <TesoreriaFlujo
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            turnoAbiertoId={turnoId}
+          />
+        )}
 
         {pestana === 'compras' && (
           <ComprasProveedores

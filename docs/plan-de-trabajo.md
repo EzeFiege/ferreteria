@@ -178,13 +178,37 @@ Estado:
 
 ---
 
+## Fase 5 — Tesorería y Flujo de Fondos (Completada ✅)
+
+Objetivo: administración integral de cheques físicos y eCheqs (cartera, depósito bancario, endoso a proveedores), liquidación diferida de ventas con tarjeta/QR y cálculo en tiempo real del flujo de caja proyectado a corto y mediano plazo (7, 14, 30 y 60 días).
+
+Estado:
+- [x] Migración `006_tesoreria_flujo.sql`:
+  - Tabla `cheque_cartera`: multi-tenant con clave compuesta `(id, negocio_id)`, RLS activo para `app_user`, soporte de cheques físicos y eCheqs, seguimiento de estados (`en_cartera`, `depositado`, `entregado_proveedor`, `rechazado`, `anulado`).
+  - Vista `v_flujo_caja_proyectado`: consolida ingresos estimados por acreditaciones de tarjetas según `dias_acreditacion` + cheques en cartera según `fecha_pago`, y egresos estimados por facturas de compra según `dias_plazo_pago` del proveedor.
+- [x] Esquemas compartidos en `packages/shared`: `guardarChequeSchema`, `depositarChequeSchema`, `endosarChequeProveedorSchema`, `rechazarChequeSchema` y tipo `ItemFlujoCajaProyectado`.
+- [x] Endpoints en `apps/api/src/routes/tesoreria.ts`:
+  - `GET /tesoreria/cheques`: cartera con filtros por estado y tipo de cheque.
+  - `POST /tesoreria/cheques`: recepción e ingreso de valores a la cartera.
+  - `POST /tesoreria/cheques/:id/depositar`: depósito en cuenta bancaria.
+  - `POST /tesoreria/cheques/:id/endosar-proveedor`: endoso a proveedor con crédito automático en su libro inmutable de cuenta corriente.
+  - `POST /tesoreria/cheques/:id/rechazar`: gestión y auditoría de cheques rebotados o rechazados.
+  - `GET /tesoreria/flujo-proyectado`: cálculo dinámico del cash flow consolidado con totales de ingresos, egresos y saldo neto a 7, 14, 30 o 60 días.
+- [x] Suite de tests de integración (`apps/api/src/routes/tesoreria.test.ts` y `apps/api/src/db/migrate.test.ts`) pasando al 100% contra PostgreSQL 16 real.
+- [x] Pantalla web completa `apps/web/src/TesoreriaFlujo.tsx`:
+  - Subpestaña de cartera de cheques y eCheqs con filtros por estado/soporte y modales de alta, depósito bancario, endoso a proveedor y rechazo.
+  - Subpestaña de flujo de fondos proyectado con selector de horizonte temporal (7, 14, 30, 60 días), métricas consolidadas de ingresos/egresos/saldo neto y cronograma detallado de vencimientos.
+- [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `9. Tesorería y Flujo`.
+
+---
+
 ## Próximas Fases
 
 | Fase | Contenido |
 |---|---|
-| 5. Tesorería y Flujo | Cartera de cheques/eCheqs, acreditaciones de tarjetas/QR y cash flow proyectado |
 | 6. Facturación Fiscal | Comprobantes electrónicos A, B, C con ARCA y contingencia offline |
 | 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |
+
 
 
 
