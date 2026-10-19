@@ -369,4 +369,92 @@ export const ajusteCtaCteSchema = z.object({
 });
 export type AjusteCtaCteInput = z.infer<typeof ajusteCtaCteSchema>;
 
+/**
+ * Esquemas para Fase 4 — Compras, proveedores, recepción de mercadería y cuentas a pagar.
+ */
+export const condicionIvaProveedorSchema = z.enum([
+  'responsable_inscripto',
+  'monotributo',
+  'exento',
+  'consumidor_final',
+]);
+export type CondicionIvaProveedor = z.infer<typeof condicionIvaProveedorSchema>;
+
+export const guardarProveedorSchema = z.object({
+  id: uuidSchema.optional(),
+  codigo: z.string().trim().min(1).max(50),
+  razonSocial: z.string().trim().min(1).max(255),
+  nombreFantasia: z.string().trim().max(255).optional().or(z.literal('')),
+  cuit: z.string().trim().max(30).optional().or(z.literal('')),
+  condicionIva: condicionIvaProveedorSchema.default('responsable_inscripto'),
+  telefono: z.string().trim().max(50).optional().or(z.literal('')),
+  email: z.string().trim().email().max(255).optional().or(z.literal('')),
+  direccion: z.string().max(500).optional().or(z.literal('')),
+  contactoNombre: z.string().trim().max(255).optional().or(z.literal('')),
+  diasPlazoPago: z.number().int().min(0).max(365).default(30),
+  activo: z.boolean().default(true),
+  notas: z.string().max(1000).optional(),
+});
+export type GuardarProveedorInput = z.infer<typeof guardarProveedorSchema>;
+
+export const itemOrdenCompraInputSchema = z.object({
+  id: uuidSchema.optional(),
+  productoId: uuidSchema,
+  descripcion: z.string().trim().min(1).max(255),
+  cantidadPedida: cantidadDecimalSchema,
+  costoUnitario: montoDecimalSchema,
+  subtotal: montoDecimalSchema,
+});
+export type ItemOrdenCompraInput = z.infer<typeof itemOrdenCompraInputSchema>;
+
+export const guardarOrdenCompraSchema = z.object({
+  id: uuidSchema.optional(),
+  numero: z.string().trim().min(1).max(50),
+  proveedorId: uuidSchema,
+  condicionPago: z.enum(['contado', 'cuenta_corriente']).default('cuenta_corriente'),
+  fechaEmision: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fechaEsperada: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+  total: montoDecimalSchema,
+  notas: z.string().max(1000).optional(),
+  items: z.array(itemOrdenCompraInputSchema).min(1),
+});
+export type GuardarOrdenCompraInput = z.infer<typeof guardarOrdenCompraSchema>;
+
+export const recibirOrdenCompraSchema = z.object({
+  ordenCompraId: uuidSchema,
+  actualizarCostoBase: z.boolean().default(true),
+  itemsRecibidos: z.array(
+    z.object({
+      productoId: uuidSchema,
+      cantidadRecibida: cantidadDecimalSchema,
+      costoUnitario: montoDecimalSchema,
+    }),
+  ),
+});
+export type RecibirOrdenCompraInput = z.infer<typeof recibirOrdenCompraSchema>;
+
+export const registrarPagoProveedorSchema = z.object({
+  id: uuidSchema.optional(),
+  proveedorId: uuidSchema,
+  turnoId: uuidSchema,
+  medioPagoId: uuidSchema,
+  monto: montoPositivoSchema,
+  descripcion: z.string().max(500).optional(),
+});
+export type RegistrarPagoProveedorInput = z.infer<
+  typeof registrarPagoProveedorSchema
+>;
+
+export const ajusteCtaCteProveedorSchema = z.object({
+  id: uuidSchema.optional(),
+  proveedorId: uuidSchema,
+  tipo: z.enum(['ajuste_debito', 'ajuste_credito']),
+  monto: montoPositivoSchema,
+  descripcion: z.string().min(1).max(500),
+});
+export type AjusteCtaCteProveedorInput = z.infer<
+  typeof ajusteCtaCteProveedorSchema
+>;
+
+
 

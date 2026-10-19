@@ -7,6 +7,7 @@ import { rolUsuarioSchema } from '@ferreteria/shared';
 import type { TokenVerifier } from './auth.js';
 import { registerCajaRoutes } from './routes/caja.js';
 import { registerClientesRoutes } from './routes/clientes.js';
+import { registerComprasRoutes } from './routes/compras.js';
 import { registerConfiguracionRoutes } from './routes/configuracion.js';
 import { registerProductosRoutes } from './routes/productos.js';
 import { registerReportesRoutes } from './routes/reportes.js';
@@ -116,6 +117,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     verifyToken: options.verifyToken,
   });
 
+  registerComprasRoutes(app, {
+    pool,
+    verifyToken: options.verifyToken,
+  });
+
   const webDistPath =
     process.env['WEB_DIST_PATH'] ??
     path.resolve(import.meta.dirname, '../../web/dist');
@@ -138,6 +144,8 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         urlRaw.startsWith('/ventas') ||
         urlRaw.startsWith('/productos') ||
         urlRaw.startsWith('/clientes') ||
+        urlRaw.startsWith('/proveedores') ||
+        urlRaw.startsWith('/compras') ||
         urlRaw.startsWith('/listas-precios') ||
         urlRaw.startsWith('/stock') ||
         urlRaw.startsWith('/reportes') ||

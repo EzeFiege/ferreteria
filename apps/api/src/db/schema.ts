@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   integer,
   numeric,
   pgTable,
@@ -259,4 +260,88 @@ export const movimientoCtaCte = pgTable('movimiento_cta_cte', {
   creadoPor: uuid('creado_por').notNull(),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const proveedor = pgTable('proveedor', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  codigo: text('codigo').notNull(),
+  razonSocial: text('razon_social').notNull(),
+  nombreFantasia: text('nombre_fantasia'),
+  cuit: text('cuit'),
+  condicionIva: text('condicion_iva').notNull().default('responsable_inscripto'),
+  telefono: text('telefono'),
+  email: text('email'),
+  direccion: text('direccion'),
+  contactoNombre: text('contacto_nombre'),
+  diasPlazoPago: integer('dias_plazo_pago').notNull().default(30),
+  activo: boolean('activo').notNull().default(true),
+  notas: text('notas'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const productoProveedor = pgTable('producto_proveedor', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  proveedorId: uuid('proveedor_id').notNull(),
+  codigoProveedor: text('codigo_proveedor'),
+  costoProveedor: numeric('costo_proveedor', { precision: 14, scale: 2 }).notNull(),
+  esPrincipal: boolean('es_principal').notNull().default(false),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ordenCompra = pgTable('orden_compra', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: text('numero').notNull(),
+  proveedorId: uuid('proveedor_id').notNull(),
+  estado: text('estado')
+    .$type<'borrador' | 'confirmada' | 'recibida' | 'anulada'>()
+    .notNull()
+    .default('borrador'),
+  condicionPago: text('condicion_pago')
+    .$type<'contado' | 'cuenta_corriente'>()
+    .notNull()
+    .default('cuenta_corriente'),
+  fechaEmision: date('fecha_emision').notNull().defaultNow(),
+  fechaEsperada: date('fecha_esperada'),
+  fechaRecepcion: timestamp('fecha_recepcion', { withTimezone: true }),
+  total: numeric('total', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  notas: text('notas'),
+  creadoPor: uuid('creado_por').notNull(),
+  recibidoPor: uuid('recibido_por'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const itemOrdenCompra = pgTable('item_orden_compra', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  ordenCompraId: uuid('orden_compra_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  descripcion: text('descripcion').notNull(),
+  cantidadPedida: numeric('cantidad_pedida', { precision: 14, scale: 3 }).notNull(),
+  cantidadRecibida: numeric('cantidad_recibida', { precision: 14, scale: 3 })
+    .notNull()
+    .default('0.000'),
+  costoUnitario: numeric('costo_unitario', { precision: 14, scale: 2 }).notNull(),
+  subtotal: numeric('subtotal', { precision: 14, scale: 2 }).notNull(),
+});
+
+export const movimientoCtaCteProveedor = pgTable('movimiento_cta_cte_proveedor', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  proveedorId: uuid('proveedor_id').notNull(),
+  tipo: text('tipo')
+    .$type<'debito_compra' | 'credito_pago' | 'ajuste_debito' | 'ajuste_credito'>()
+    .notNull(),
+  sentido: text('sentido').$type<'debito' | 'credito'>().notNull(),
+  monto: numeric('monto', { precision: 14, scale: 2 }).notNull(),
+  ordenCompraId: uuid('orden_compra_id'),
+  movimientoCajaId: uuid('movimiento_caja_id'),
+  descripcion: text('descripcion'),
+  revierteId: uuid('revierte_id'),
+  creadoPor: uuid('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
 

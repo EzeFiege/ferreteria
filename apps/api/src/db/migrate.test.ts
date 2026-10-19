@@ -60,6 +60,7 @@ describe('API & Migraciones de base de datos', () => {
       '002_rol_app_user.sql',
       '003_catalogo_stock.sql',
       '004_clientes_cuenta_corriente.sql',
+      '005_compras_proveedores.sql',
     ]);
 
     const sql002 = await readFile(
