@@ -14,6 +14,11 @@ import { apiUrl } from './api-url.js';
 import { ConfiguracionPiloto } from './ConfiguracionPiloto.js';
 import { ReportesHistorial } from './ReportesHistorial.js';
 import { CatalogoStock } from './CatalogoStock.js';
+import {
+  ClientesCtaCte,
+  type ClienteItem,
+  type ClienteAutorizadoItem,
+} from './ClientesCtaCte.js';
 
 export interface ItemCarrito {
   id: string;
@@ -232,8 +237,31 @@ export function App(): ReactElement {
     useState<ResumenTurnoEstado | null>(null);
 
   const [pestana, setPestana] = useState<
-    'venta' | 'egreso' | 'arqueo' | 'reportes' | 'configuracion' | 'catalogo'
+    | 'venta'
+    | 'egreso'
+    | 'arqueo'
+    | 'reportes'
+    | 'configuracion'
+    | 'catalogo'
+    | 'clientes'
   >('venta');
+
+  // Cliente para venta rápida en mostrador
+  const [clienteSeleccionadoVenta, setClienteSeleccionadoVenta] =
+    useState<ClienteItem | null>(null);
+  const [autorizadosClienteVenta, setAutorizadosClienteVenta] = useState<
+    ClienteAutorizadoItem[]
+  >([]);
+  const [autorizadoRetiroIdSeleccionado, setAutorizadoRetiroIdSeleccionado] =
+    useState<string>('');
+  const [modalBuscarClienteVenta, setModalBuscarClienteVenta] =
+    useState<boolean>(false);
+  const [busquedaClienteVenta, setBusquedaClienteVenta] = useState<string>('');
+  const [clientesSugeridosVenta, setClientesSugeridosVenta] = useState<
+    ClienteItem[]
+  >([]);
+  const [buscandoClienteVenta, setBuscandoClienteVenta] =
+    useState<boolean>(false);
 
   const [listasPrecios, setListasPrecios] = useState<ListaPrecioItem[]>([]);
   const [listaPrecioIdSeleccionada, setListaPrecioIdSeleccionada] =
@@ -449,6 +477,60 @@ export function App(): ReactElement {
       void cargarListasPrecios(operadorActivo.token);
     }
   }, [cargarListasPrecios, operadorActivo?.token]);
+
+  const buscarClientesParaVenta = useCallback(
+    async (termino: string, token: string) => {
+      setBuscandoClienteVenta(true);
+      try {
+        const params = new URLSearchParams();
+        if (termino.trim()) {
+          params.set('q', termino.trim());
+        }
+        const res = await fetch(apiUrl(`/api/clientes?${params.toString()}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = (await res.json()) as ClienteItem[];
+          setClientesSugeridosVenta(data);
+        }
+      } catch {
+        // Ignora fallo offline
+      } finally {
+        setBuscandoClienteVenta(false);
+      }
+    },
+    [],
+  );
+
+  const seleccionarClienteVenta = useCallback(
+    async (c: ClienteItem | null) => {
+      setClienteSeleccionadoVenta(c);
+      setAutorizadoRetiroIdSeleccionado('');
+      setAutorizadosClienteVenta([]);
+      setModalBuscarClienteVenta(false);
+
+      if (c && operadorActivo) {
+        if (c.listaPrecioId) {
+          setListaPrecioIdSeleccionada(c.listaPrecioId);
+        }
+        try {
+          const res = await fetch(apiUrl(`/api/clientes/${c.id}`), {
+            headers: { Authorization: `Bearer ${operadorActivo.token}` },
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              cliente: ClienteItem;
+              autorizados: ClienteAutorizadoItem[];
+            };
+            setAutorizadosClienteVenta(data.autorizados);
+          }
+        } catch {
+          // Ignora fallo offline
+        }
+      }
+    },
+    [operadorActivo],
+  );
 
   const agregarProductoPorCodigo = useCallback(
     async (codigoOTexto: string) => {
@@ -818,11 +900,22 @@ export function App(): ReactElement {
       return;
     }
 
+    if (medioSeleccionado.nombre.toLowerCase().includes('cuenta corriente')) {
+      if (!clienteSeleccionadoVenta) {
+        setAviso('Para cobrar con Cuenta Corriente debés seleccionar un cliente.');
+        return;
+      }
+    }
+
     const ventaId = generarUuid();
     const movimientoId = generarUuid();
     const payload = {
       id: ventaId,
       turnoId,
+      ...(clienteSeleccionadoVenta ? { clienteId: clienteSeleccionadoVenta.id } : {}),
+      ...(autorizadoRetiroIdSeleccionado
+        ? { autorizadoRetiroId: autorizadoRetiroIdSeleccionado }
+        : {}),
       total: montoVentaFormateado,
       items:
         itemsCarrito.length > 0
@@ -866,7 +959,7 @@ export function App(): ReactElement {
         monto: montoVentaFormateado,
         esEfectivo: medioSeleccionado.esEfectivo,
         medioPagoNombre: medioSeleccionado.nombre,
-        etiqueta: `${medioSeleccionado.nombre} · ${rubroSeleccionado?.nombre ?? 'Sin rubro'}`,
+        etiqueta: `${medioSeleccionado.nombre} · ${rubroSeleccionado?.nombre ?? 'Sin rubro'}${clienteSeleccionadoVenta ? ` (${clienteSeleccionadoVenta.nombre})` : ''}`,
       },
       creadoEn: new Date().toISOString(),
       intentos: 0,
@@ -877,6 +970,9 @@ export function App(): ReactElement {
     setDescripcionVenta('');
     setToquesVentaActual(0);
     setItemsCarrito([]);
+    setClienteSeleccionadoVenta(null);
+    setAutorizadoRetiroIdSeleccionado('');
+    setAutorizadosClienteVenta([]);
 
     if (modoSinConexion) {
       await encolarOperacion(operacion);
@@ -1251,7 +1347,7 @@ export function App(): ReactElement {
           </div>
         </section>
 
-        <nav className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-200 p-1 md:grid-cols-6">
+        <nav className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-200 p-1 md:grid-cols-7">
           <button
             type="button"
             data-testid="tab-venta"
@@ -1336,7 +1432,36 @@ export function App(): ReactElement {
           >
             6. Catálogo y Stock
           </button>
+          <button
+            type="button"
+            data-testid="tab-clientes"
+            onClick={() => {
+              setPestana('clientes');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'clientes'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            7. Clientes y Cta. Cte.
+          </button>
         </nav>
+
+        {pestana === 'clientes' && (
+          <ClientesCtaCte
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            turnoAbiertoId={turnoId}
+            mediosPago={contexto.mediosPago}
+            listasPrecios={listasPrecios}
+            onCobranzaRegistrada={() => {
+              if (turnoId) {
+                void cargarResumenTurno(turnoId, operadorActivo.token);
+              }
+            }}
+          />
+        )}
 
         {pestana === 'catalogo' && (
           <CatalogoStock
@@ -1818,6 +1943,117 @@ export function App(): ReactElement {
                     </div>
                   </div>
 
+                  {/* Selector de Cliente y Autorizado */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Cliente (Cuenta Corriente / Ficha)
+                      </div>
+                      {clienteSeleccionadoVenta ? (
+                        <button
+                          type="button"
+                          onClick={() => void seleccionarClienteVenta(null)}
+                          className="text-xs font-bold text-rose-600 hover:underline"
+                        >
+                          Quitar cliente
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          data-testid="btn-seleccionar-cliente"
+                          onClick={() => {
+                            setModalBuscarClienteVenta(true);
+                            void buscarClientesParaVenta('', operadorActivo.token);
+                          }}
+                          className="text-xs font-bold text-indigo-600 hover:underline"
+                        >
+                          + Asignar Cliente
+                        </button>
+                      )}
+                    </div>
+
+                    {clienteSeleccionadoVenta ? (
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center justify-between rounded-lg bg-white p-2.5 border border-slate-200 shadow-sm">
+                          <div>
+                            <div className="font-bold text-sm text-slate-900">
+                              <span className="font-mono text-xs text-indigo-600 font-bold mr-1.5">
+                                {clienteSeleccionadoVenta.codigo}
+                              </span>
+                              {clienteSeleccionadoVenta.nombre}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {clienteSeleccionadoVenta.cuitDni
+                                ? `CUIT/DNI ${clienteSeleccionadoVenta.cuitDni} · `
+                                : ''}
+                              Lista: {clienteSeleccionadoVenta.listaPrecioNombre ?? 'Mostrador'}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs font-bold text-slate-500">Saldo Deudor</div>
+                            <div
+                              className={`font-mono text-xs font-bold ${
+                                parseFloat(clienteSeleccionadoVenta.saldoDeudor) > 0
+                                  ? 'text-rose-600'
+                                  : 'text-emerald-700'
+                              }`}
+                            >
+                              {formatearPesos(clienteSeleccionadoVenta.saldoDeudor)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Si el medio de pago seleccionado es Cuenta Corriente */}
+                        {contexto.mediosPago
+                          .find((m) => m.id === medioPagoIdSeleccionado)
+                          ?.nombre.toLowerCase()
+                          .includes('corriente') && (
+                          <div className="rounded-lg bg-amber-50 p-2.5 border border-amber-200">
+                            <label className="block text-xs font-bold text-amber-900 mb-1">
+                              Persona que retira mercadería:
+                            </label>
+                            <select
+                              value={autorizadoRetiroIdSeleccionado}
+                              onChange={(e) => {
+                                setAutorizadoRetiroIdSeleccionado(e.target.value);
+                              }}
+                              className="w-full rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
+                            >
+                              <option value="">
+                                Titular de la cuenta ({clienteSeleccionadoVenta.nombre})
+                              </option>
+                              {autorizadosClienteVenta.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.nombre} {a.dni ? `(DNI ${a.dni})` : ''}{' '}
+                                  {a.rolParentesco ? `- ${a.rolParentesco}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            {clienteSeleccionadoVenta.excedidoLimite && (
+                              <p className="mt-1 text-[11px] font-bold text-rose-700">
+                                ⚠️ Atención: este cliente superó su límite de crédito asignado.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-1 flex items-center justify-between text-xs text-slate-600">
+                        <span>Consumidor Final (Mostrador)</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalBuscarClienteVenta(true);
+                            void buscarClientesParaVenta('', operadorActivo.token);
+                          }}
+                          className="rounded-lg bg-white px-2.5 py-1 font-semibold text-slate-700 border border-slate-200 hover:bg-slate-100"
+                        >
+                          Buscar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <label
                       htmlFor="input-descripcion-venta"
@@ -2149,6 +2385,113 @@ export function App(): ReactElement {
             )}
           </div>
         </section>
+
+        {/* Modal Selección de Cliente en Venta Mostrador */}
+        {modalBuscarClienteVenta && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+            data-testid="modal-buscar-cliente-venta"
+          >
+            <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+                <h3 className="text-base font-black text-slate-900">
+                  Seleccionar Cliente para la Venta
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalBuscarClienteVenta(false);
+                  }}
+                  className="text-slate-400 hover:text-slate-700 text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Buscar por nombre, código o CUIT/DNI..."
+                  value={busquedaClienteVenta}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBusquedaClienteVenta(val);
+                    void buscarClientesParaVenta(val, operadorActivo.token);
+                  }}
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {buscandoClienteVenta ? (
+                  <div className="py-6 text-center text-xs text-slate-400">Buscando...</div>
+                ) : clientesSugeridosVenta.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    No se encontraron clientes con ese criterio.
+                  </div>
+                ) : (
+                  clientesSugeridosVenta.map((c) => (
+                    <div
+                      key={c.id}
+                      data-testid={`opcion-cliente-${c.codigo}`}
+                      onClick={() => {
+                        void seleccionarClienteVenta(c);
+                      }}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 p-3 hover:border-indigo-500 hover:bg-indigo-50/50 cursor-pointer transition"
+                    >
+                      <div>
+                        <div className="font-bold text-sm text-slate-900">
+                          <span className="font-mono text-xs text-indigo-600 mr-2 font-bold">
+                            {c.codigo}
+                          </span>
+                          {c.nombre}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {c.cuitDni || 'Sin CUIT'} · {c.condicionIva.replace('_', ' ')} · Lista:{' '}
+                          {c.listaPrecioNombre ?? 'Mostrador'}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-slate-500">Saldo</div>
+                        <div
+                          className={`font-mono text-xs font-bold ${
+                            parseFloat(c.saldoDeudor) > 0
+                              ? 'text-rose-600'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          {formatearPesos(c.saldoDeudor)}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mt-4 flex justify-between border-t border-slate-200 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void seleccionarClienteVenta(null);
+                  }}
+                  className="text-xs font-bold text-slate-600 hover:underline"
+                >
+                  Mantener Consumidor Final
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalBuscarClienteVenta(false);
+                  }}
+                  className="rounded-xl border border-slate-300 px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

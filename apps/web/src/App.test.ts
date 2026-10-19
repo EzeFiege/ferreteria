@@ -100,4 +100,60 @@ describe('@ferreteria/web utilidades de formato, teclado y cola offline', () => 
       total: '3300.00',
     });
   });
+
+  it('encola y sincroniza ventas con cuenta corriente, cliente y persona autorizada a retirar', async () => {
+    const clienteId = '55555555-5555-4555-8555-555555555555';
+    const autorizadoId = '66666666-6666-4666-8666-666666666666';
+    const opVentaCtaCte: OperacionCola = {
+      id: '77777777-7777-4777-8777-777777777777',
+      tipo: 'venta',
+      endpoint: '/api/ventas',
+      token: 'token-cta-cte',
+      creadoEn: '2026-10-19T17:00:00.000Z',
+      intentos: 0,
+      resumenLocal: {
+        monto: '15400.00',
+        esEfectivo: false,
+        medioPagoNombre: 'Cuenta Corriente',
+        etiqueta: 'Cuenta Corriente · Materiales (Construcciones SRL)',
+      },
+      payload: {
+        id: '77777777-7777-4777-8777-777777777777',
+        turnoId: '22222222-2222-4222-8222-222222222222',
+        clienteId,
+        autorizadoRetiroId: autorizadoId,
+        total: '15400.00',
+        pagos: [
+          {
+            movimientoId: '88888888-8888-4888-8888-888888888888',
+            medioPagoId: '99999999-9999-4999-8999-999999999999',
+            monto: '15400.00',
+          },
+        ],
+      },
+    };
+
+    await encolarOperacion(opVentaCtaCte);
+    const pendientes = await listarOperacionesPendientes();
+    expect(pendientes.length).toBe(1);
+    expect(pendientes[0]?.resumenLocal.medioPagoNombre).toBe('Cuenta Corriente');
+
+    const fetchSync = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 201 }),
+    );
+
+    const resultado = await sincronizarColaPendiente(fetchSync);
+    expect(resultado).toEqual({ sincronizadas: 1, pendientes: 0 });
+
+    const [, init] = fetchSync.mock.calls[0] ?? [];
+    const payloadEnviado = JSON.parse(init?.body as string) as {
+      clienteId?: string;
+      autorizadoRetiroId?: string;
+      total?: string;
+    };
+    expect(payloadEnviado.clienteId).toBe(clienteId);
+    expect(payloadEnviado.autorizadoRetiroId).toBe(autorizadoId);
+    expect(payloadEnviado.total).toBe('15400.00');
+  });
 });
+

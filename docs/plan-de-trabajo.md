@@ -125,7 +125,7 @@ Estado:
 
 ---
 
-## Fase 3 — CRM y Cuenta Corriente de Clientes (Backend completado ✅)
+## Fase 3 — CRM y Cuenta Corriente de Clientes (Completada ✅)
 
 Objetivo: gestión de clientes (albañiles, gremio, constructoras), personas autorizadas a retirar mercadería, libro de cuenta corriente inmutable (solo agregar) y cobranzas integradas en el turno de caja.
 
@@ -143,6 +143,9 @@ Estado:
   - `POST /clientes/:id/ajustes`: ajustes manuales debidamente auditados.
 - [x] Integración en `apps/api/src/routes/caja.ts`: débito automático en cuenta corriente al vender en mostrador con el medio de cobro 'Cuenta Corriente' vinculando `clienteId` y `autorizadoRetiroId`.
 - [x] Suite de 5 tests de integración (`apps/api/src/routes/clientes.test.ts`) pasando al 100% contra PostgreSQL 16 real.
+- [x] Pantalla web completa `apps/web/src/ClientesCtaCte.tsx`: listado y búsqueda en tiempo real, alta/edición de clientes, ficha de extracto inmutable con débitos/créditos, gestión de personas autorizadas a retirar, cobranza en caja y ajustes manuales auditados.
+- [x] Integración en punto de venta / mostrador (`apps/web/src/App.tsx`): pestaña `7. Clientes y Cta. Cte.`, asignación de cliente a la venta, selección de persona autorizada que retira mercadería, validación de límite de crédito y sincronización offline con IndexedDB.
+- [x] Tests unitarios y de sincronización offline cubriendo cuenta corriente en mostrador (`apps/web/src/App.test.ts`).
 
 ---
 
@@ -150,9 +153,9 @@ Estado:
 
 | Fase | Contenido |
 |---|---|
-| 3.1 Web Clientes & Cta Cte | Pantalla de clientes, ficha de cuenta corriente, cobranza rápida en mostrador y selección de cliente en venta |
 | 4. Compras y Proveedores | Proveedores, listas de costo, órdenes de compra y cuentas a pagar |
 | 5. Tesorería y Flujo | Cartera de cheques/eCheqs, acreditaciones de tarjetas/QR y cash flow proyectado |
 | 6. Facturación Fiscal | Comprobantes electrónicos A, B, C con ARCA y contingencia offline |
 | 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |
+
 
