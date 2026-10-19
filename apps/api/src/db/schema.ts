@@ -371,5 +371,69 @@ export const chequeCartera = pgTable('cheque_cartera', {
   actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const puntoVenta = pgTable('punto_venta', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: integer('numero').notNull(),
+  nombre: text('nombre').notNull().default('Punto de Venta Principal'),
+  tipo: text('tipo').$type<'electronico_arca' | 'manual_contingencia'>().notNull().default('electronico_arca'),
+  habilitado: boolean('habilitado').notNull().default(true),
+  cuitEmisor: text('cuit_emisor'),
+  inicioActividades: date('inicio_actividades'),
+  iibb: text('iibb'),
+  notas: text('notas'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const comprobanteFiscal = pgTable('comprobante_fiscal', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  puntoVentaId: uuid('punto_venta_id').notNull(),
+  numeroPuntoVenta: integer('numero_punto_venta').notNull(),
+  tipoComprobante: text('tipo_comprobante')
+    .$type<
+      | 'factura_a'
+      | 'nota_credito_a'
+      | 'nota_debito_a'
+      | 'factura_b'
+      | 'nota_credito_b'
+      | 'nota_debito_b'
+      | 'factura_c'
+      | 'nota_credito_c'
+      | 'nota_debito_c'
+    >()
+    .notNull(),
+  codigoAfip: integer('codigo_afip').notNull(),
+  numeroComprobante: integer('numero_comprobante').notNull(),
+  fechaEmision: date('fecha_emision').notNull().defaultNow(),
+  ventaId: uuid('venta_id'),
+  clienteId: uuid('cliente_id'),
+  cuitCliente: text('cuit_cliente'),
+  tipoDocumentoAfip: integer('tipo_documento_afip').notNull().default(99),
+  razonSocialCliente: text('razon_social_cliente').notNull(),
+  condicionIvaCliente: text('condicion_iva_cliente').notNull().default('consumidor_final'),
+  domicilioCliente: text('domicilio_cliente'),
+  subtotalNetoGravado: numeric('subtotal_neto_gravado', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  subtotalIva21: numeric('subtotal_iva_21', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  subtotalIva105: numeric('subtotal_iva_105', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  subtotalIva27: numeric('subtotal_iva_27', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  subtotalExento: numeric('subtotal_exento', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  subtotalNoGravado: numeric('subtotal_no_gravado', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  total: numeric('total', { precision: 14, scale: 2 }).notNull(),
+  estado: text('estado')
+    .$type<'autorizado' | 'contingencia_offline' | 'rechazado' | 'anulado'>()
+    .notNull()
+    .default('autorizado'),
+  cae: text('cae'),
+  vencimientoCae: date('vencimiento_cae'),
+  codigoQrArca: text('codigo_qr_arca'),
+  resultadoAfip: text('resultado_afip'),
+  motivoObservacionAfip: text('motivo_observacion_afip'),
+  creadoPor: uuid('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+
 
 

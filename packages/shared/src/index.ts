@@ -515,6 +515,87 @@ export interface ItemFlujoCajaProyectado {
   monto: string;
 }
 
+// ─── Facturación Fiscal ARCA / AFIP (Fase 6) ───────────────────────────────
+
+export const tipoComprobanteFiscalSchema = z.enum([
+  'factura_a',
+  'nota_credito_a',
+  'nota_debito_a',
+  'factura_b',
+  'nota_credito_b',
+  'nota_debito_b',
+  'factura_c',
+  'nota_credito_c',
+  'nota_debito_c',
+]);
+export type TipoComprobanteFiscal = z.infer<typeof tipoComprobanteFiscalSchema>;
+
+export const estadoComprobanteFiscalSchema = z.enum([
+  'autorizado',
+  'contingencia_offline',
+  'rechazado',
+  'anulado',
+]);
+export type EstadoComprobanteFiscal = z.infer<
+  typeof estadoComprobanteFiscalSchema
+>;
+
+export const guardarPuntoVentaSchema = z.object({
+  id: uuidSchema.optional(),
+  numero: z.number().int().min(1).max(99998),
+  nombre: z.string().min(1).max(100),
+  tipo: z.enum(['electronico_arca', 'manual_contingencia']).default('electronico_arca'),
+  habilitado: z.boolean().default(true),
+  cuitEmisor: z.string().max(20).optional().nullable(),
+  inicioActividades: z.string().min(10).max(10).optional().nullable(),
+  iibb: z.string().max(50).optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+});
+export type GuardarPuntoVentaInput = z.infer<typeof guardarPuntoVentaSchema>;
+
+export const emitirComprobanteFiscalSchema = z.object({
+  id: uuidSchema.optional(),
+  ventaId: uuidSchema.optional().nullable(),
+  puntoVentaNumero: z.number().int().min(1).max(99998),
+  tipoComprobante: tipoComprobanteFiscalSchema,
+  clienteId: uuidSchema.optional().nullable(),
+  cuitCliente: z.string().max(20).optional().nullable(),
+  razonSocialCliente: z.string().min(1).max(200),
+  condicionIvaCliente: condicionIvaSchema.default('consumidor_final'),
+  domicilioCliente: z.string().max(200).optional().nullable(),
+  alicuotaIva: z.enum(['21', '10.5', '27', '0']).default('21'),
+  total: montoPositivoSchema,
+  enContingenciaOffline: z.boolean().default(false),
+});
+export type EmitirComprobanteFiscalInput = z.infer<
+  typeof emitirComprobanteFiscalSchema
+>;
+
+export interface ComprobanteFiscalDetalle {
+  id: string;
+  puntoVentaNumero: number;
+  tipoComprobante: TipoComprobanteFiscal;
+  numeroComprobante: number;
+  codigoAfip: number;
+  fechaEmision: string;
+  ventaId: string | null;
+  cuitCliente: string | null;
+  razonSocialCliente: string;
+  condicionIvaCliente: CondicionIva;
+  subtotalNetoGravado: string;
+  subtotalIva21: string;
+  subtotalIva105: string;
+  subtotalIva27: string;
+  subtotalExento: string;
+  total: string;
+  estado: EstadoComprobanteFiscal;
+  cae: string | null;
+  vencimientoCae: string | null;
+  codigoQrArca: string | null;
+  creadoEn: string;
+}
+
+
 
 
 
