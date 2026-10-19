@@ -344,4 +344,32 @@ export const movimientoCtaCteProveedor = pgTable('movimiento_cta_cte_proveedor',
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const chequeCartera = pgTable('cheque_cartera', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  tipo: text('tipo').$type<'fisico' | 'echeq'>().notNull().default('fisico'),
+  numero: text('numero').notNull(),
+  banco: text('banco').notNull(),
+  cuitEmisor: text('cuit_emisor'),
+  titular: text('titular'),
+  fechaEmision: date('fecha_emision').notNull().defaultNow(),
+  fechaPago: date('fecha_pago').notNull(),
+  monto: numeric('monto', { precision: 14, scale: 2 }).notNull(),
+  estado: text('estado')
+    .$type<'en_cartera' | 'depositado' | 'entregado_proveedor' | 'rechazado' | 'anulado'>()
+    .notNull()
+    .default('en_cartera'),
+  clienteId: uuid('cliente_id'),
+  proveedorId: uuid('proveedor_id'),
+  movimientoCajaId: uuid('movimiento_caja_id'),
+  cuentaBancariaDestino: text('cuenta_bancaria_destino'),
+  fechaDeposito: date('fecha_deposito'),
+  fechaEntrega: date('fecha_entrega'),
+  notas: text('notas'),
+  creadoPor: uuid('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+
 

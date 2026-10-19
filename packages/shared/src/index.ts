@@ -456,5 +456,65 @@ export type AjusteCtaCteProveedorInput = z.infer<
   typeof ajusteCtaCteProveedorSchema
 >;
 
+// ─── Tesorería y Cheques (Fase 5) ──────────────────────────────────────────
+
+export const tipoChequeSchema = z.enum(['fisico', 'echeq']);
+export type TipoCheque = z.infer<typeof tipoChequeSchema>;
+
+export const estadoChequeSchema = z.enum([
+  'en_cartera',
+  'depositado',
+  'entregado_proveedor',
+  'rechazado',
+  'anulado',
+]);
+export type EstadoCheque = z.infer<typeof estadoChequeSchema>;
+
+export const guardarChequeSchema = z.object({
+  id: uuidSchema.optional(),
+  tipo: tipoChequeSchema.default('fisico'),
+  numero: z.string().min(1).max(50),
+  banco: z.string().min(1).max(100),
+  cuitEmisor: z.string().max(20).optional().nullable(),
+  titular: z.string().max(150).optional().nullable(),
+  fechaEmision: z.string().min(10).max(10).optional(),
+  fechaPago: z.string().min(10).max(10),
+  monto: montoPositivoSchema,
+  clienteId: uuidSchema.optional().nullable(),
+  movimientoCajaId: uuidSchema.optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+});
+export type GuardarChequeInput = z.infer<typeof guardarChequeSchema>;
+
+export const depositarChequeSchema = z.object({
+  cuentaBancariaDestino: z.string().min(1).max(100),
+  fechaDeposito: z.string().min(10).max(10).optional(),
+  notas: z.string().max(500).optional().nullable(),
+});
+export type DepositarChequeInput = z.infer<typeof depositarChequeSchema>;
+
+export const endosarChequeProveedorSchema = z.object({
+  proveedorId: uuidSchema,
+  fechaEntrega: z.string().min(10).max(10).optional(),
+  notas: z.string().max(500).optional().nullable(),
+});
+export type EndosarChequeProveedorInput = z.infer<
+  typeof endosarChequeProveedorSchema
+>;
+
+export const rechazarChequeSchema = z.object({
+  motivo: z.string().min(1).max(500),
+});
+export type RechazarChequeInput = z.infer<typeof rechazarChequeSchema>;
+
+export interface ItemFlujoCajaProyectado {
+  fecha: string;
+  tipo: 'acreditacion_tarjeta' | 'cheque_en_cartera' | 'vencimiento_proveedor';
+  descripcion: string;
+  sentido: 'ingreso' | 'egreso';
+  monto: string;
+}
+
+
 
 
