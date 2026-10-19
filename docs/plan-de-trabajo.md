@@ -125,13 +125,34 @@ Estado:
 
 ---
 
+## Fase 3 — CRM y Cuenta Corriente de Clientes (Backend completado ✅)
+
+Objetivo: gestión de clientes (albañiles, gremio, constructoras), personas autorizadas a retirar mercadería, libro de cuenta corriente inmutable (solo agregar) y cobranzas integradas en el turno de caja.
+
+Estado:
+- [x] Migración `004_clientes_cuenta_corriente.sql`: ampliación de tabla `cliente`, tabla `cliente_autorizado`, tabla inmutable `movimiento_cta_cte` con trigger SQL que bloquea `UPDATE` y `DELETE`, vista `v_saldo_cliente` con cálculo en tiempo real de débitos, créditos, saldo deudor y crédito disponible, sembrado de medio de pago 'Cuenta Corriente' y RLS activo.
+- [x] Esquemas compartidos en `packages/shared`: `guardarClienteSchema`, `guardarClienteAutorizadoSchema`, `registrarCobranzaCtaCteSchema`, `ajusteCtaCteSchema` y `autorizadoRetiroId` en ventas.
+- [x] Endpoints en `apps/api/src/routes/clientes.ts`:
+  - `GET /clientes`: listado con búsqueda y saldos en vivo.
+  - `GET /clientes/:id`: ficha del cliente con autorizados a retirar y crédito disponible.
+  - `POST /clientes`: alta de cliente con código autogenerado (`CLI-xxx`) o manual.
+  - `PUT /clientes/:id`: actualización de datos fiscales, comerciales y límite de crédito.
+  - `POST /clientes/:id/autorizados`: alta de personas autorizadas a retirar en mostrador con DNI y rol/parentesco.
+  - `GET /clientes/:id/cuenta-corriente`: historial cronológico de movimientos con saldo deudor en vivo.
+  - `POST /clientes/:id/cobranzas`: cobro en caja que impacta atómicamente el turno abierto y acredita la cuenta corriente.
+  - `POST /clientes/:id/ajustes`: ajustes manuales debidamente auditados.
+- [x] Integración en `apps/api/src/routes/caja.ts`: débito automático en cuenta corriente al vender en mostrador con el medio de cobro 'Cuenta Corriente' vinculando `clienteId` y `autorizadoRetiroId`.
+- [x] Suite de 5 tests de integración (`apps/api/src/routes/clientes.test.ts`) pasando al 100% contra PostgreSQL 16 real.
+
+---
+
 ## Próximas Fases
 
 | Fase | Contenido |
 |---|---|
-| 2.1 Web Catálogo | Pantalla de gestión de productos con escáner de pistola, autocompletado EAN e impresión de etiquetas QR/barras |
-| 3. Clientes y CRM | Ficha de clientes, cuenta corriente inmutable, límites de crédito y cobranzas |
+| 3.1 Web Clientes & Cta Cte | Pantalla de clientes, ficha de cuenta corriente, cobranza rápida en mostrador y selección de cliente en venta |
 | 4. Compras y Proveedores | Proveedores, listas de costo, órdenes de compra y cuentas a pagar |
 | 5. Tesorería y Flujo | Cartera de cheques/eCheqs, acreditaciones de tarjetas/QR y cash flow proyectado |
 | 6. Facturación Fiscal | Comprobantes electrónicos A, B, C con ARCA y contingencia offline |
 | 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |
+

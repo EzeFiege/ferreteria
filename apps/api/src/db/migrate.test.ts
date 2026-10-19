@@ -59,6 +59,7 @@ describe('API & Migraciones de base de datos', () => {
       '001_core_caja.sql',
       '002_rol_app_user.sql',
       '003_catalogo_stock.sql',
+      '004_clientes_cuenta_corriente.sql',
     ]);
 
     const sql002 = await readFile(
@@ -85,6 +86,7 @@ describe('API & Migraciones de base de datos', () => {
       '001_core_caja.sql',
       '002_rol_app_user.sql',
       '003_catalogo_stock.sql',
+      '004_clientes_cuenta_corriente.sql',
     ]);
 
     // Ejecutar por segunda vez debe ser idempotente (0 nuevas migraciones)
@@ -139,11 +141,11 @@ describe('API & Migraciones de base de datos', () => {
       ]);
       await client.query('select sembrar_negocio($1)', [neg2Id]);
 
-      // Estando en neg2, solo debemos ver los 3 medios de pago de neg2
+      // Estando en neg2, solo debemos ver los 4 medios de pago de neg2 (Efectivo, Tarjeta, Transferencia/QR, Cuenta Corriente)
       const mediosNeg2 = await client.query<{ negocio_id: string }>(
         'select negocio_id from medio_pago',
       );
-      expect(mediosNeg2.rowCount).toBe(3);
+      expect(mediosNeg2.rowCount).toBe(4);
       expect(mediosNeg2.rows.every((r) => r.negocio_id === neg2Id)).toBe(true);
 
       await client.query('rollback');

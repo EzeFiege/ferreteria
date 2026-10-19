@@ -64,10 +64,39 @@ export const categoria = pgTable('categoria', {
 export const cliente = pgTable('cliente', {
   id: uuid('id').primaryKey().defaultRandom(),
   negocioId: uuid('negocio_id').notNull(),
+  codigo: text('codigo').notNull(),
   nombre: text('nombre').notNull(),
+  cuitDni: text('cuit_dni'),
   documento: text('documento'),
+  condicionIva: text('condicion_iva')
+    .$type<
+      'consumidor_final' | 'responsable_inscripto' | 'monotributo' | 'exento'
+    >()
+    .notNull()
+    .default('consumidor_final'),
+  telefono: text('telefono'),
+  email: text('email'),
+  direccion: text('direccion'),
+  listaPrecioId: uuid('lista_precio_id'),
+  limiteCredito: numeric('limite_credito', { precision: 14, scale: 2 })
+    .notNull()
+    .default('0.00'),
+  diasPlazoCredito: integer('dias_plazo_credito').notNull().default(30),
+  activo: boolean('activo').notNull().default(true),
+  notas: text('notas'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const clienteAutorizado = pgTable('cliente_autorizado', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  clienteId: uuid('cliente_id').notNull(),
+  nombre: text('nombre').notNull(),
+  dni: text('dni'),
+  rolParentesco: text('rol_parentesco'),
   telefono: text('telefono'),
   activo: boolean('activo').notNull().default(true),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const turnoCaja = pgTable('turno_caja', {
@@ -91,6 +120,7 @@ export const venta = pgTable('venta', {
   negocioId: uuid('negocio_id').notNull(),
   turnoId: uuid('turno_id').notNull(),
   clienteId: uuid('cliente_id'),
+  autorizadoRetiroId: uuid('autorizado_retiro_id'),
   total: numeric('total', { precision: 14, scale: 2 }).notNull(),
   estado: text('estado')
     .$type<'confirmada' | 'anulada'>()
@@ -209,3 +239,24 @@ export const movimientoStock = pgTable('movimiento_stock', {
   creadoPor: uuid('creado_por').notNull(),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const movimientoCtaCte = pgTable('movimiento_cta_cte', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  clienteId: uuid('cliente_id').notNull(),
+  tipo: text('tipo')
+    .$type<
+      'debito_venta' | 'credito_cobranza' | 'ajuste_debito' | 'ajuste_credito'
+    >()
+    .notNull(),
+  sentido: text('sentido').$type<'debito' | 'credito'>().notNull(),
+  monto: numeric('monto', { precision: 14, scale: 2 }).notNull(),
+  ventaId: uuid('venta_id'),
+  movimientoCajaId: uuid('movimiento_caja_id'),
+  autorizadoRetiroId: uuid('autorizado_retiro_id'),
+  descripcion: text('descripcion'),
+  revierteId: uuid('revierte_id'),
+  creadoPor: uuid('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+

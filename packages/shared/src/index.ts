@@ -131,6 +131,7 @@ export const registrarVentaSchema = z
     id: uuidSchema,
     turnoId: uuidSchema,
     clienteId: uuidSchema.optional(),
+    autorizadoRetiroId: uuidSchema.optional(),
     total: montoPositivoSchema,
     pagos: z.array(pagoVentaInputSchema).min(1),
     items: z.array(itemVentaInputSchema).optional(),
@@ -305,5 +306,67 @@ export const lookupEanResultSchema = z.object({
   precios: z.record(z.string(), z.string()).optional(),
 });
 export type LookupEanResult = z.infer<typeof lookupEanResultSchema>;
+
+/**
+ * Esquemas para Fase 3 — CRM de clientes, personas autorizadas y cuenta corriente.
+ */
+export const condicionIvaSchema = z.enum([
+  'consumidor_final',
+  'responsable_inscripto',
+  'monotributo',
+  'exento',
+]);
+export type CondicionIva = z.infer<typeof condicionIvaSchema>;
+
+export const guardarClienteSchema = z.object({
+  id: uuidSchema.optional(),
+  codigo: z.string().trim().min(1).max(50),
+  nombre: z.string().trim().min(1).max(255),
+  cuitDni: z.string().trim().max(30).optional().or(z.literal('')),
+  condicionIva: condicionIvaSchema.default('consumidor_final'),
+  telefono: z.string().trim().max(50).optional().or(z.literal('')),
+  email: z.string().trim().email().max(255).optional().or(z.literal('')),
+  direccion: z.string().max(500).optional().or(z.literal('')),
+  listaPrecioId: uuidSchema.optional(),
+  limiteCredito: montoNoNegativoSchema.default('0.00'),
+  diasPlazoCredito: z.number().int().min(0).max(365).default(30),
+  activo: z.boolean().default(true),
+  notas: z.string().max(1000).optional(),
+});
+export type GuardarClienteInput = z.infer<typeof guardarClienteSchema>;
+
+export const guardarClienteAutorizadoSchema = z.object({
+  id: uuidSchema.optional(),
+  clienteId: uuidSchema,
+  nombre: z.string().trim().min(1).max(255),
+  dni: z.string().trim().max(30).optional().or(z.literal('')),
+  rolParentesco: z.string().trim().max(100).optional().or(z.literal('')),
+  telefono: z.string().trim().max(50).optional().or(z.literal('')),
+  activo: z.boolean().default(true),
+});
+export type GuardarClienteAutorizadoInput = z.infer<
+  typeof guardarClienteAutorizadoSchema
+>;
+
+export const registrarCobranzaCtaCteSchema = z.object({
+  id: uuidSchema,
+  clienteId: uuidSchema,
+  turnoId: uuidSchema,
+  medioPagoId: uuidSchema,
+  monto: montoPositivoSchema,
+  descripcion: z.string().max(500).optional(),
+});
+export type RegistrarCobranzaCtaCteInput = z.infer<
+  typeof registrarCobranzaCtaCteSchema
+>;
+
+export const ajusteCtaCteSchema = z.object({
+  id: uuidSchema,
+  clienteId: uuidSchema,
+  tipo: z.enum(['ajuste_debito', 'ajuste_credito']),
+  monto: montoPositivoSchema,
+  descripcion: z.string().min(1).max(500),
+});
+export type AjusteCtaCteInput = z.infer<typeof ajusteCtaCteSchema>;
 
 

@@ -25,6 +25,7 @@ import {
   categoria,
   medioPago,
   movimiento,
+  movimientoCtaCte,
   movimientoStock,
   producto,
   rubro,
@@ -378,6 +379,7 @@ export function registerCajaRoutes(
               negocioId: claims.negocioId,
               turnoId: body.turnoId,
               clienteId: body.clienteId ?? null,
+              autorizadoRetiroId: body.autorizadoRetiroId ?? null,
               total: body.total,
               creadoPor: claims.usuarioId,
             })
@@ -452,6 +454,29 @@ export function registerCajaRoutes(
                 creadoPor: claims.usuarioId,
               })
               .onConflictDoNothing({ target: movimiento.id });
+          }
+
+          if (esNuevaVenta && body.clienteId) {
+            for (const pago of body.pagos) {
+              const [mp] = await db
+                .select()
+                .from(medioPago)
+                .where(eq(medioPago.id, pago.medioPagoId));
+
+              if (mp && mp.nombre.toLowerCase().includes('cuenta corriente')) {
+                await db.insert(movimientoCtaCte).values({
+                  negocioId: claims.negocioId,
+                  clienteId: body.clienteId,
+                  tipo: 'debito_venta',
+                  sentido: 'debito',
+                  monto: pago.monto,
+                  ventaId: body.id,
+                  autorizadoRetiroId: body.autorizadoRetiroId ?? null,
+                  descripcion: `Venta mostrador ${body.id}`,
+                  creadoPor: claims.usuarioId,
+                });
+              }
+            }
           }
 
           const [ventaActual] = await db
