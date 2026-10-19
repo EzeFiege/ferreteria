@@ -308,7 +308,9 @@ describe('Fase 4 — Compras, Proveedores, Kardex de Stock y Cuentas a Pagar', (
       url: `/turnos/${turnoId}/resumen`,
       headers: { Authorization: `Bearer ${negocioA.tokenCajero}` },
     });
-    const resumen = resTurno.json<{ efectivoEsperado: string; salidasEfectivo: string }>();
+    const { resumen } = resTurno.json<{
+      resumen: { efectivoEsperado: string; salidasEfectivo: string };
+    }>();
     expect(resumen.salidasEfectivo).toBe('40000.00');
     expect(resumen.efectivoEsperado).toBe('160000.00');
 

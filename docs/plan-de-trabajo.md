@@ -149,13 +149,42 @@ Estado:
 
 ---
 
+## Fase 4 — Compras, Proveedores y Cuentas a Pagar (Completada ✅)
+
+Objetivo: directorio y fichas de proveedores, órdenes de compra, recepción de mercadería con impacto directo en el kardex inmutable de stock (`movimiento_stock`) y actualización del costo base de reposición, libro de cuenta corriente inmutable de proveedores (`movimiento_cta_cte_proveedor`) y pagos imputados en el turno de caja abierto como egresos.
+
+Estado:
+- [x] Migración `005_compras_proveedores.sql`: tablas `proveedor`, `producto_proveedor`, `orden_compra`, `item_orden_compra`, tabla inmutable `movimiento_cta_cte_proveedor` con trigger SQL que bloquea `UPDATE` y `DELETE`, vista `v_saldo_proveedor` con cálculo en vivo de compras, pagos y saldo a pagar, RLS activo para `app_user`.
+- [x] Esquemas compartidos en `packages/shared`: `guardarProveedorSchema`, `guardarOrdenCompraSchema`, `recibirOrdenCompraSchema`, `registrarPagoProveedorSchema`, `ajusteCtaCteProveedorSchema`.
+- [x] Endpoints en `apps/api/src/routes/compras.ts`:
+  - `GET /proveedores`: listado con búsqueda y saldos en vivo.
+  - `GET /proveedores/:id`: ficha con saldos acumulados de compras y pagos.
+  - `POST /proveedores` y `PUT /proveedores/:id`: alta y edición de datos fiscales y plazos de pago.
+  - `GET /proveedores/:id/cuenta-corriente`: extracto inmutable con saldos calculados.
+  - `POST /proveedores/:id/pagos`: pago a proveedor con impacto atómico en el turno de caja abierto (egreso en efectivo o bancario) y crédito en el libro del proveedor.
+  - `POST /proveedores/:id/ajustes`: ajustes manuales debidamente auditados.
+  - `GET /compras`: listado de órdenes de compra con estado y proveedor.
+  - `POST /compras`: emisión de órdenes de compra con detalle de ítems.
+  - `POST /compras/:id/recibir`: recepción de mercadería que inserta movimientos en el kardex inmutable de stock (`ingreso_compra`), actualiza el costo base del producto y, si fue a cuenta corriente, genera el débito en el proveedor.
+- [x] Suite de tests de integración (`apps/api/src/routes/compras.test.ts` y `apps/api/src/db/migrate.test.ts`) pasando al 100% contra PostgreSQL 16 real.
+- [x] Pantalla web completa `apps/web/src/ComprasProveedores.tsx`:
+  - Directorio de proveedores con filtro por deuda pendiente, alta y edición.
+  - Ficha de extracto inmutable con débitos por compras y créditos por pagos.
+  - Modal de pago imputado directamente en el turno de caja abierto (con selección de medio de cobro).
+  - Emisión de órdenes de compra con múltiples ítems, cantidades y costos unitarios.
+  - Modal de recepción de mercadería con ingreso a stock y opción de actualización de costo base.
+- [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `8. Compras y Proveedores`, refresco automático del saldo en caja ante pagos a proveedores.
+- [x] Tests unitarios y de encolado offline de egresos por proveedores (`apps/web/src/App.test.ts`).
+
+---
+
 ## Próximas Fases
 
 | Fase | Contenido |
 |---|---|
-| 4. Compras y Proveedores | Proveedores, listas de costo, órdenes de compra y cuentas a pagar |
 | 5. Tesorería y Flujo | Cartera de cheques/eCheqs, acreditaciones de tarjetas/QR y cash flow proyectado |
 | 6. Facturación Fiscal | Comprobantes electrónicos A, B, C con ARCA y contingencia offline |
 | 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |
+
 
 

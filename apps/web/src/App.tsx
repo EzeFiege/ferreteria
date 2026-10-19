@@ -19,6 +19,7 @@ import {
   type ClienteItem,
   type ClienteAutorizadoItem,
 } from './ClientesCtaCte.js';
+import { ComprasProveedores } from './ComprasProveedores.js';
 
 export interface ItemCarrito {
   id: string;
@@ -244,6 +245,7 @@ export function App(): ReactElement {
     | 'configuracion'
     | 'catalogo'
     | 'clientes'
+    | 'compras'
   >('venta');
 
   // Cliente para venta rápida en mostrador
@@ -1446,7 +1448,35 @@ export function App(): ReactElement {
           >
             7. Clientes y Cta. Cte.
           </button>
+          <button
+            type="button"
+            data-testid="tab-compras"
+            onClick={() => {
+              setPestana('compras');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'compras'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            8. Compras y Proveedores
+          </button>
         </nav>
+
+        {pestana === 'compras' && (
+          <ComprasProveedores
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            turnoAbiertoId={turnoId}
+            mediosPago={contexto.mediosPago}
+            onPagoRegistrado={() => {
+              if (turnoId) {
+                void cargarResumenTurno(turnoId, operadorActivo.token);
+              }
+            }}
+          />
+        )}
 
         {pestana === 'clientes' && (
           <ClientesCtaCte

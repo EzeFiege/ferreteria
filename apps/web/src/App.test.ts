@@ -155,5 +155,52 @@ describe('@ferreteria/web utilidades de formato, teclado y cola offline', () => 
     expect(payloadEnviado.autorizadoRetiroId).toBe(autorizadoId);
     expect(payloadEnviado.total).toBe('15400.00');
   });
+
+  it('encola y sincroniza egreso de caja por pago a proveedor', async () => {
+    const turnoId = '44444444-4444-4444-8444-444444444444';
+    const opPagoProv: OperacionCola = {
+      id: '55555555-5555-4555-8555-555555555555',
+      tipo: 'egreso',
+      endpoint: '/api/movimientos/egreso',
+      token: 'token-cajero',
+      creadoEn: '2026-10-19T21:00:00.000Z',
+      intentos: 0,
+      resumenLocal: {
+        monto: '45000.00',
+        esEfectivo: true,
+        medioPagoNombre: 'Efectivo',
+        etiqueta: 'Pago a Proveedor (Distribuidora Loma Negra)',
+      },
+      payload: {
+        id: '55555555-5555-4555-8555-555555555555',
+        turnoId,
+        medioPagoId: '20000000-0000-4000-8000-000000000001',
+        categoriaId: '10000000-0000-4000-8000-000000000007',
+        monto: '45000.00',
+        descripcion: 'Pago factura Loma Negra',
+      },
+    };
+
+    await encolarOperacion(opPagoProv);
+    const pendientes = await listarOperacionesPendientes();
+    expect(pendientes.length).toBe(1);
+    expect(pendientes[0]?.resumenLocal.etiqueta).toContain('Pago a Proveedor');
+
+    const fetchSync = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 201 }),
+    );
+
+    const resultado = await sincronizarColaPendiente(fetchSync);
+    expect(resultado).toEqual({ sincronizadas: 1, pendientes: 0 });
+
+    const [url, init] = fetchSync.mock.calls[0] ?? [];
+    expect(url).toBe('/api/movimientos/egreso');
+    const payloadEnviado = JSON.parse(init?.body as string) as {
+      monto: string;
+      turnoId: string;
+    };
+    expect(payloadEnviado.monto).toBe('45000.00');
+    expect(payloadEnviado.turnoId).toBe(turnoId);
+  });
 });
 
