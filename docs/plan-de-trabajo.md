@@ -252,6 +252,31 @@ Estado:
   - Modal para registro de asientos manuales con renglones dinámicos y validador en tiempo real de partida doble (`Total Debe === Total Haber`).
 - [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `11. Contabilidad`.
 
+---
+
+## Fase 8 — Presupuestos y Cotizaciones de Mostrador (Completada ✅)
+
+Objetivo: confección ágil de presupuestos para clientes y gremios de la construcción con validez temporal de precios, selección de listas con márgenes, impresión formal y conversión directa a venta en el carrito de mostrador en un solo clic.
+
+Estado:
+- [x] Migración `009_presupuestos.sql`:
+  - Tabla `presupuesto`: número correlativo por negocio, fecha de emisión, fecha de vencimiento (`dias_validez`), cliente/contacto, lista de precios, totales, observaciones, estado (`pendiente`, `aprobado_convertido`, `vencido`, `cancelado`), venta_id asociado y RLS activo para `app_user`.
+  - Tabla `item_presupuesto`: producto_id opcional, código, nombre, unidad, cantidad (`numeric(14,3)`), precio unitario (`numeric(14,2)`), descuento porcentual, subtotal y clave foránea en cascada.
+- [x] Esquemas compartidos en `packages/shared`: `estadoPresupuestoSchema`, `guardarItemPresupuestoSchema`, `guardarPresupuestoSchema`, `ItemPresupuestoDetalle` y `PresupuestoDetalle`.
+- [x] Endpoints en `apps/api/src/routes/presupuestos.ts`:
+  - `GET /presupuestos`: listado con filtros por estado o búsqueda, con cálculo dinámico de vencimiento según la fecha actual.
+  - `GET /presupuestos/:id`: detalle completo del presupuesto con sus ítems cotizados.
+  - `POST /presupuestos`: emisión con bloqueo advisory lock por tenant para números consecutivos sin saltos.
+  - `POST /presupuestos/:id/marcar-convertido`: marca como `aprobado_convertido` vinculando el id de la venta efectuada.
+  - `POST /presupuestos/:id/cancelar`: cancelación de presupuestos.
+- [x] Suite de tests de integración (`apps/api/src/routes/presupuestos.test.ts` y `apps/api/src/db/migrate.test.ts`) pasando al 100% (66 tests en total) contra PostgreSQL 16 real.
+- [x] Pantalla web completa `apps/web/src/Presupuestos.tsx`:
+  - Directorio de presupuestos con buscador por cliente/obra y selector de estado.
+  - Modal de confección de presupuesto con buscador en vivo de artículos de catálogo, cálculo automático de precio según lista elegida, ítems libres y cálculo de totales en centavos.
+  - Modal de detalle con opción de impresión directa y botón de **"Cargar en Carrito y Vender 🛒"** que transfiere instantáneamente los materiales al mostrador de caja para facturar.
+- [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `12. Presupuestos`.
+
+
 
 
 

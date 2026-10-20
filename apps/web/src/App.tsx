@@ -23,6 +23,7 @@ import { ComprasProveedores } from './ComprasProveedores.js';
 import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 import { FacturacionFiscal } from './FacturacionFiscal.js';
 import { Contabilidad } from './Contabilidad.js';
+import { Presupuestos } from './Presupuestos.js';
 
 export interface ItemCarrito {
   id: string;
@@ -252,6 +253,7 @@ export function App(): ReactElement {
     | 'tesoreria'
     | 'facturacion'
     | 'contabilidad'
+    | 'presupuestos'
   >('venta');
 
   // Cliente para venta rápida en mostrador
@@ -1498,6 +1500,20 @@ export function App(): ReactElement {
           </button>
           <button
             type="button"
+            data-testid="tab-presupuestos"
+            onClick={() => {
+              setPestana('presupuestos');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'presupuestos'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            12. Presupuestos
+          </button>
+          <button
+            type="button"
             data-testid="tab-contabilidad"
             onClick={() => {
               setPestana('contabilidad');
@@ -1512,7 +1528,22 @@ export function App(): ReactElement {
           </button>
         </nav>
 
-                {pestana === 'contabilidad' && (
+                {pestana === 'presupuestos' && (
+          <Presupuestos
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            listasPrecios={listasPrecios}
+            onCargarAlCarrito={(nuevosItems, contactoNombre) => {
+              setItemsCarrito(nuevosItems);
+              if (contactoNombre) {
+                setDescripcionVenta('Presupuesto ' + contactoNombre);
+              }
+              setPestana('venta');
+              setAviso('Artículos del presupuesto cargados al carrito de mostrador');
+            }}
+          />
+        )}
+        {pestana === 'contabilidad' && (
           <Contabilidad
             token={operadorActivo.token}
             rolUsuario={operadorActivo.rol}
