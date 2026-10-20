@@ -696,3 +696,85 @@ export interface ItemSumasYSaldos {
   saldoAcreedor: string;
 }
 
+
+
+// -------------------------------------------------------------
+// Presupuestos y Cotizaciones de Mostrador
+// -------------------------------------------------------------
+
+export const estadoPresupuestoSchema = z.enum([
+  'pendiente',
+  'aprobado_convertido',
+  'vencido',
+  'cancelado',
+]);
+export type EstadoPresupuesto = z.infer<typeof estadoPresupuestoSchema>;
+
+export const guardarItemPresupuestoSchema = z.object({
+  id: uuidSchema.optional(),
+  productoId: uuidSchema.optional().nullable(),
+  codigo: z.string().max(50).optional().nullable(),
+  nombre: z.string().min(1).max(200),
+  unidad: z.string().max(20).default('unidad'),
+  cantidad: cantidadDecimalSchema,
+  precioUnitario: montoDecimalSchema,
+  descuentoPct: z.string().default('0.00'),
+  subtotal: montoDecimalSchema,
+  notas: z.string().max(200).optional().nullable(),
+});
+export type GuardarItemPresupuestoInput = z.infer<
+  typeof guardarItemPresupuestoSchema
+>;
+
+export const guardarPresupuestoSchema = z.object({
+  id: uuidSchema.optional(),
+  diasValidez: z.number().int().min(1).max(365).default(15),
+  clienteId: uuidSchema.optional().nullable(),
+  nombreContacto: z.string().max(100).optional().nullable(),
+  telefonoContacto: z.string().max(50).optional().nullable(),
+  emailContacto: z.string().email().optional().nullable(),
+  listaPrecioId: uuidSchema.optional().nullable(),
+  subtotal: montoDecimalSchema,
+  descuentoGeneral: montoDecimalSchema.default('0.00'),
+  total: montoDecimalSchema,
+  observaciones: z.string().max(500).optional().nullable(),
+  items: z.array(guardarItemPresupuestoSchema).min(1),
+});
+export type GuardarPresupuestoInput = z.infer<typeof guardarPresupuestoSchema>;
+
+export interface ItemPresupuestoDetalle {
+  id: string;
+  presupuestoId: string;
+  productoId: string | null;
+  codigo: string | null;
+  nombre: string;
+  unidad: string;
+  cantidad: string;
+  precioUnitario: string;
+  descuentoPct: string;
+  subtotal: string;
+  notas: string | null;
+}
+
+export interface PresupuestoDetalle {
+  id: string;
+  numero: number;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  diasValidez: number;
+  clienteId: string | null;
+  nombreContacto: string | null;
+  telefonoContacto: string | null;
+  emailContacto: string | null;
+  listaPrecioId: string | null;
+  subtotal: string;
+  descuentoGeneral: string;
+  total: string;
+  estado: EstadoPresupuesto;
+  estaVencido: boolean;
+  ventaId: string | null;
+  observaciones: string | null;
+  creadoPor: string | null;
+  creadoEn: string;
+  items: ItemPresupuestoDetalle[];
+}

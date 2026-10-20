@@ -14,6 +14,7 @@ import { registerReportesRoutes } from './routes/reportes.js';
 import { registerTesoreriaRoutes } from './routes/tesoreria.js';
 import { registerFacturacionRoutes } from './routes/facturacion.js';
 import { registerContabilidadRoutes } from './routes/contabilidad.js';
+import { registerPresupuestosRoutes } from './routes/presupuestos.js';
 
 const { Pool } = pg;
 
@@ -140,6 +141,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     verifyToken: options.verifyToken,
   });
 
+  registerPresupuestosRoutes(app, {
+    pool,
+    verifyToken: options.verifyToken,
+  });
+
   const webDistPath =
     process.env['WEB_DIST_PATH'] ??
     path.resolve(import.meta.dirname, '../../web/dist');
@@ -167,6 +173,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         urlRaw.startsWith('/tesoreria') ||
         urlRaw.startsWith('/facturacion') ||
         urlRaw.startsWith('/contabilidad') ||
+        urlRaw.startsWith('/presupuestos') ||
         urlRaw.startsWith('/listas-precios') ||
         urlRaw.startsWith('/stock') ||
         urlRaw.startsWith('/reportes') ||

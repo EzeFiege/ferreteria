@@ -487,3 +487,47 @@ export const renglonAsiento = pgTable('renglon_asiento', {
   descripcion: text('descripcion'),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
+
+
+// Presupuestos y Cotizaciones de Mostrador
+export const presupuesto = pgTable('presupuesto', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: integer('numero').notNull(),
+  fechaEmision: timestamp('fecha_emision', { withTimezone: true }).notNull().defaultNow(),
+  fechaVencimiento: date('fecha_vencimiento').notNull(),
+  diasValidez: integer('dias_validez').notNull().default(15),
+  clienteId: uuid('cliente_id'),
+  nombreContacto: text('nombre_contacto'),
+  telefonoContacto: text('telefono_contacto'),
+  emailContacto: text('email_contacto'),
+  listaPrecioId: uuid('lista_precio_id'),
+  subtotal: numeric('subtotal', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  descuentoGeneral: numeric('descuento_general', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  total: numeric('total', { precision: 14, scale: 2 }).notNull(),
+  estado: text('estado')
+    .$type<'pendiente' | 'aprobado_convertido' | 'vencido' | 'cancelado'>()
+    .notNull()
+    .default('pendiente'),
+  ventaId: uuid('venta_id'),
+  observaciones: text('observaciones'),
+  creadoPor: text('creado_por'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const itemPresupuesto = pgTable('item_presupuesto', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  presupuestoId: uuid('presupuesto_id').notNull(),
+  negocioId: uuid('negocio_id').notNull(),
+  productoId: uuid('producto_id'),
+  codigo: text('codigo'),
+  nombre: text('nombre').notNull(),
+  unidad: text('unidad').notNull().default('unidad'),
+  cantidad: numeric('cantidad', { precision: 14, scale: 3 }).notNull(),
+  precioUnitario: numeric('precio_unitario', { precision: 14, scale: 2 }).notNull(),
+  descuentoPct: numeric('descuento_pct', { precision: 5, scale: 2 }).notNull().default('0.00'),
+  subtotal: numeric('subtotal', { precision: 14, scale: 2 }).notNull(),
+  notas: text('notas'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
