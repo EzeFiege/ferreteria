@@ -52,6 +52,7 @@ describe('API & Migraciones de base de datos', () => {
       '005_compras_proveedores.sql',
       '006_tesoreria_flujo.sql',
       '007_facturacion_fiscal.sql',
+      '008_contabilidad.sql',
     ]);
 
     const sql002 = await readFile(
@@ -82,6 +83,7 @@ describe('API & Migraciones de base de datos', () => {
       '005_compras_proveedores.sql',
       '006_tesoreria_flujo.sql',
       '007_facturacion_fiscal.sql',
+      '008_contabilidad.sql',
     ]);
 
     // Ejecutar por segunda vez debe ser idempotente (0 nuevas migraciones)

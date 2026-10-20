@@ -437,3 +437,53 @@ export const comprobanteFiscal = pgTable('comprobante_fiscal', {
 
 
 
+
+
+// Fase 7: Contabilidad y Partida Doble
+export const cuentaContable = pgTable('cuenta_contable', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  codigo: text('codigo').notNull(),
+  nombre: text('nombre').notNull(),
+  tipo: text('tipo')
+    .$type<'activo' | 'pasivo' | 'patrimonio_neto' | 'ingreso' | 'egreso'>()
+    .notNull(),
+  descripcion: text('descripcion'),
+  activa: boolean('activa').notNull().default(true),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const asientoContable = pgTable('asiento_contable', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: integer('numero').notNull(),
+  fecha: timestamp('fecha', { withTimezone: true }).notNull().defaultNow(),
+  concepto: text('concepto').notNull(),
+  origen: text('origen')
+    .$type<
+      | 'venta'
+      | 'egreso_caja'
+      | 'cobro_cta_cte'
+      | 'compra_stock'
+      | 'pago_proveedor'
+      | 'deposito_cheque'
+      | 'ajuste'
+      | 'manual'
+    >()
+    .notNull(),
+  referenciaId: uuid('referencia_id'),
+  creadoPor: text('creado_por'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const renglonAsiento = pgTable('renglon_asiento', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  asientoId: uuid('asiento_id').notNull(),
+  negocioId: uuid('negocio_id').notNull(),
+  cuentaId: uuid('cuenta_id').notNull(),
+  debe: numeric('debe', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  haber: numeric('haber', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  descripcion: text('descripcion'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -595,7 +595,104 @@ export interface ComprobanteFiscalDetalle {
   creadoEn: string;
 }
 
+// -------------------------------------------------------------
+// Fase 7: Contabilidad y Partida Doble
+// -------------------------------------------------------------
 
+export const tipoCuentaContableSchema = z.enum([
+  'activo',
+  'pasivo',
+  'patrimonio_neto',
+  'ingreso',
+  'egreso',
+]);
+export type TipoCuentaContable = z.infer<typeof tipoCuentaContableSchema>;
 
+export const origenAsientoSchema = z.enum([
+  'venta',
+  'egreso_caja',
+  'cobro_cta_cte',
+  'compra_stock',
+  'pago_proveedor',
+  'deposito_cheque',
+  'ajuste',
+  'manual',
+]);
+export type OrigenAsiento = z.infer<typeof origenAsientoSchema>;
 
+export const guardarCuentaContableSchema = z.object({
+  id: uuidSchema.optional(),
+  codigo: z.string().min(1).max(20),
+  nombre: z.string().min(1).max(100),
+  tipo: tipoCuentaContableSchema,
+  descripcion: z.string().max(200).optional().nullable(),
+  activa: z.boolean().default(true),
+});
+export type GuardarCuentaContableInput = z.infer<
+  typeof guardarCuentaContableSchema
+>;
+
+export const renglonAsientoInputSchema = z.object({
+  cuentaId: uuidSchema,
+  debe: montoDecimalSchema.default('0.00'),
+  haber: montoDecimalSchema.default('0.00'),
+  descripcion: z.string().max(200).optional().nullable(),
+});
+export type RenglonAsientoInput = z.infer<typeof renglonAsientoInputSchema>;
+
+export const crearAsientoManualSchema = z.object({
+  fecha: z.string().optional(),
+  concepto: z.string().min(3).max(250),
+  origen: origenAsientoSchema.default('manual'),
+  referenciaId: uuidSchema.optional().nullable(),
+  renglones: z.array(renglonAsientoInputSchema).min(2),
+});
+export type CrearAsientoManualInput = z.infer<typeof crearAsientoManualSchema>;
+
+export interface CuentaContableItem {
+  id: string;
+  codigo: string;
+  nombre: string;
+  tipo: TipoCuentaContable;
+  descripcion: string | null;
+  activa: boolean;
+}
+
+export interface RenglonAsientoDetalle {
+  id: string;
+  cuentaId: string;
+  cuentaCodigo: string;
+  cuentaNombre: string;
+  cuentaTipo: TipoCuentaContable;
+  debe: string;
+  haber: string;
+  descripcion: string | null;
+}
+
+export interface AsientoContableDetalle {
+  id: string;
+  numero: number;
+  fecha: string;
+  concepto: string;
+  origen: OrigenAsiento;
+  referenciaId: string | null;
+  creadoPor: string | null;
+  creadoEn: string;
+  totalDebe: string;
+  totalHaber: string;
+  cuadrado: boolean;
+  renglones: RenglonAsientoDetalle[];
+}
+
+export interface ItemSumasYSaldos {
+  cuentaId: string;
+  cuentaCodigo: string;
+  cuentaNombre: string;
+  cuentaTipo: TipoCuentaContable;
+  cuentaActiva: boolean;
+  totalDebe: string;
+  totalHaber: string;
+  saldoDeudor: string;
+  saldoAcreedor: string;
+}
 

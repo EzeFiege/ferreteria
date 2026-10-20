@@ -11,7 +11,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @ferreteria/shared build && pnpm -r typecheck",
     "lint": "eslint .",
-    "test": "pnpm --filter @ferreteria/shared build && vitest run",
+    "test": "pnpm --filter @ferreteria/shared build && vitest run --fileParallelism=false",
     "db:migrate": "pnpm --filter @ferreteria/api db:migrate",
     "db:backup:verify": "pnpm --filter @ferreteria/api db:backup:verify"
   },
