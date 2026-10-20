@@ -22,6 +22,7 @@ import {
 import { ComprasProveedores } from './ComprasProveedores.js';
 import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 import { FacturacionFiscal } from './FacturacionFiscal.js';
+import { Contabilidad } from './Contabilidad.js';
 
 export interface ItemCarrito {
   id: string;
@@ -250,6 +251,7 @@ export function App(): ReactElement {
     | 'compras'
     | 'tesoreria'
     | 'facturacion'
+    | 'contabilidad'
   >('venta');
 
   // Cliente para venta rápida en mostrador
@@ -1494,9 +1496,29 @@ export function App(): ReactElement {
           >
             10. Facturación ARCA
           </button>
+          <button
+            type="button"
+            data-testid="tab-contabilidad"
+            onClick={() => {
+              setPestana('contabilidad');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'contabilidad'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            11. Contabilidad
+          </button>
         </nav>
 
-                {pestana === 'facturacion' && (
+                {pestana === 'contabilidad' && (
+          <Contabilidad
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+          />
+        )}
+        {pestana === 'facturacion' && (
           <FacturacionFiscal
             token={operadorActivo.token}
             rolUsuario={operadorActivo.rol}

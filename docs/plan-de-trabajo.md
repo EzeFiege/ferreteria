@@ -225,11 +225,33 @@ Estado:
 
 ---
 
-## Próximas Fases
+---
 
-| Fase | Contenido |
-|---|---|
-| 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |
+## Fase 7 — Contabilidad y Partida Doble (Completada ✅)
+
+Objetivo: plan de cuentas jerárquico, registro cronológico e inmutable de asientos en el libro diario con partida doble estricta (`Total Debe === Total Haber`), balance de comprobación de sumas y saldos en vivo, y aislamiento multi-tenant con RLS.
+
+Estado:
+- [x] Migración `008_contabilidad.sql`:
+  - Tabla `cuenta_contable`: plan de cuentas (Activo, Pasivo, Patrimonio Neto, Ingreso, Egreso) con clave compuesta `(id, negocio_id)`, índices y RLS activo.
+  - Tabla inmutable `asiento_contable`: número correlativo por negocio, fecha, concepto, origen (`venta`, `egreso_caja`, `cobro_cta_cte`, `compra_stock`, `pago_proveedor`, `deposito_cheque`, `ajuste`, `manual`) y trigger SQL `tg_asiento_contable_inmutable` que prohíbe `UPDATE` y `DELETE`.
+  - Tabla inmutable `renglon_asiento`: débitos y créditos con `numeric(14,2)`, comprobación de no negatividad, trigger `tg_renglon_asiento_inmutable` y RLS activo.
+  - Vistas oficiales: `v_libro_diario` (asientos y renglones agrupados con cuentas) y `v_sumas_y_saldos` (débitos, créditos, saldos deudores y acreedores calculados en tiempo real).
+- [x] Esquemas compartidos en `packages/shared`: `tipoCuentaContableSchema`, `guardarCuentaContableSchema`, `renglonAsientoInputSchema`, `crearAsientoManualSchema`, `CuentaContableItem`, `AsientoContableDetalle` e `ItemSumasYSaldos`.
+- [x] Endpoints en `apps/api/src/routes/contabilidad.ts`:
+  - `GET /contabilidad/cuentas`: obtiene el plan de cuentas con auto-siembra de cuentas estándar de ferretería si está vacío.
+  - `POST /contabilidad/cuentas`: alta de cuentas contables imputables.
+  - `GET /contabilidad/libro-diario`: libro diario cronológico con filtros de origen y fechas, renglones agrupados y validación de partida cuadrada.
+  - `GET /contabilidad/sumas-y-saldos`: balance de comprobación de sumas y saldos con saldos deudores y acreedores.
+  - `POST /contabilidad/asientos`: registro de asiento manual con validación estricta de partida doble (`Σ Debe === Σ Haber > 0`) y bloqueo advisory lock para correlatividad sin huecos.
+- [x] Suite de tests de integración (`apps/api/src/routes/contabilidad.test.ts` y `apps/api/src/db/migrate.test.ts`) pasando al 100% (61 tests en total) contra PostgreSQL 16 real.
+- [x] Pantalla web completa `apps/web/src/Contabilidad.tsx`:
+  - Subpestaña 1: Libro Diario General con filtros de origen y fechas, visualización de asientos con renglones, totales y badge de partida cuadrada.
+  - Subpestaña 2: Balance de Sumas y Saldos con totales consolidados y verificación visual de equilibrio contable.
+  - Subpestaña 3: Plan de cuentas con alta de nuevas cuentas contables.
+  - Modal para registro de asientos manuales con renglones dinámicos y validador en tiempo real de partida doble (`Total Debe === Total Haber`).
+- [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `11. Contabilidad`.
+
 
 
 
