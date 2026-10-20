@@ -21,6 +21,7 @@ import {
 } from './ClientesCtaCte.js';
 import { ComprasProveedores } from './ComprasProveedores.js';
 import { TesoreriaFlujo } from './TesoreriaFlujo.js';
+import { FacturacionFiscal } from './FacturacionFiscal.js';
 
 export interface ItemCarrito {
   id: string;
@@ -248,6 +249,7 @@ export function App(): ReactElement {
     | 'clientes'
     | 'compras'
     | 'tesoreria'
+    | 'facturacion'
   >('venta');
 
   // Cliente para venta rápida en mostrador
@@ -1478,8 +1480,28 @@ export function App(): ReactElement {
           >
             9. Tesorería y Flujo
           </button>
+          <button
+            type="button"
+            data-testid="tab-facturacion"
+            onClick={() => {
+              setPestana('facturacion');
+            }}
+            className={`rounded-lg py-2.5 text-sm font-bold transition ${
+              pestana === 'facturacion'
+                ? 'bg-white text-slate-900 shadow'
+                : 'text-slate-700'
+            }`}
+          >
+            10. Facturación ARCA
+          </button>
         </nav>
 
+                {pestana === 'facturacion' && (
+          <FacturacionFiscal
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+          />
+        )}
         {pestana === 'tesoreria' && (
           <TesoreriaFlujo
             token={operadorActivo.token}

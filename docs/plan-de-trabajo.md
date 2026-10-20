@@ -202,12 +202,35 @@ Estado:
 
 ---
 
+## Fase 6 — Facturación Fiscal Electrónica ARCA / AFIP (Completada ✅)
+
+Objetivo: emisión de comprobantes fiscales electrónicos (Facturas A, B, C y Notas de Crédito), puntos de venta oficiales, obtención de CAE y fecha de vencimiento, generación de código QR fiscal oficial (RG 4291/4892), inmutabilidad de comprobantes y modo de contingencia offline.
+
+Estado:
+- [x] Migración `007_facturacion_fiscal.sql`:
+  - Tabla `punto_venta`: multi-tenant, correlatividad de números oficiales (1 - 99998), datos fiscales del emisor y RLS activo.
+  - Tabla inmutable `comprobante_fiscal`: desglose impositivo exacto (`subtotal_neto_gravado`, `iva_21`, `iva_105`, `iva_27`, `exento`), CAE (14 dígitos), vencimiento CAE, código QR ARCA, estado y trigger SQL `tg_comprobante_fiscal_inmutable` que bloquea `UPDATE` y `DELETE` en comprobantes autorizados.
+- [x] Esquemas compartidos en `packages/shared`: `tipoComprobanteFiscalSchema`, `guardarPuntoVentaSchema`, `emitirComprobanteFiscalSchema` y `ComprobanteFiscalDetalle`.
+- [x] Endpoints en `apps/api/src/routes/facturacion.ts`:
+  - `GET /facturacion/puntos-venta` y `POST /facturacion/puntos-venta`: administración de puntos de venta fiscales.
+  - `GET /facturacion/comprobantes` y `GET /facturacion/comprobantes/:id`: consulta y detalle de comprobantes emitidos.
+  - `POST /facturacion/emitir`: emisión con bloqueo atómico advisory lock para correlatividad estricta sin saltos, cálculo impositivo por alícuotas, simulación de autorización ARCA / AFIP con generación de CAE de 14 dígitos y QR fiscal oficial.
+- [x] Suite de tests de integración (`apps/api/src/routes/facturacion.test.ts` y `apps/api/src/db/migrate.test.ts`) pasando al 100% contra PostgreSQL 16 real.
+- [x] Pantalla web completa `apps/web/src/FacturacionFiscal.tsx`:
+  - Listado de comprobantes emitidos con desglose neto, IVA y total.
+  - Modal de emisión de Facturas A y B con validación de CUIT, selección de alícuota y opción de contingencia offline.
+  - Modal de detalle fiscal con CAE, vencimiento, QR oficial ARCA y botón de impresión de ticket/factura.
+  - Administración de puntos de venta fiscales.
+- [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `10. Facturación ARCA`.
+
+---
+
 ## Próximas Fases
 
 | Fase | Contenido |
 |---|---|
-| 6. Facturación Fiscal | Comprobantes electrónicos A, B, C con ARCA y contingencia offline |
 | 7. Contabilidad | Asientos automáticos por eventos, libro diario y sumas y saldos |
+
 
 
 
