@@ -24,6 +24,11 @@ import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 import { FacturacionFiscal } from './FacturacionFiscal.js';
 import { Contabilidad } from './Contabilidad.js';
 import { Presupuestos } from './Presupuestos.js';
+import {
+  imprimirTicketTermico,
+  type DatosTicketTermico,
+} from './utils/impresion-ticket.js';
+import { exportarACSV } from './utils/exportar-csv.js';
 
 export interface ItemCarrito {
   id: string;
@@ -299,6 +304,7 @@ export function App(): ReactElement {
   const [colaPendiente, setColaPendiente] = useState<OperacionCola[]>([]);
   const [sincronizando, setSincronizando] = useState<boolean>(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [ultimaVentaParaTicket, setUltimaVentaParaTicket] = useState<DatosTicketTermico | null>(null);
 
   const recargarCola = useCallback(async () => {
     const lista = await listarOperacionesPendientes();
@@ -976,6 +982,24 @@ export function App(): ReactElement {
     };
 
     const toquesUsados = toquesVentaActual + 1;
+    const datosTicket: DatosTicketTermico = {
+      nombreComercio: 'FERRETERÍA & CORRALÓN',
+      numeroTicket: ventaId.slice(0, 8).toUpperCase(),
+      fechaHora: new Date().toLocaleString('es-AR'),
+      cajeroNombre: operadorActivo.nombre,
+      ...(clienteSeleccionadoVenta ? { clienteNombre: clienteSeleccionadoVenta.nombre } : {}),
+      items: itemsCarrito.map((it) => ({
+        descripcion: it.nombre,
+        cantidad: it.cantidad,
+        precioUnitario: it.precioUnitario,
+        subtotal: it.subtotal,
+      })),
+      subtotal: montoVentaFormateado,
+      medioCobro: medioSeleccionado.nombre,
+      total: montoVentaFormateado,
+    };
+    setUltimaVentaParaTicket(datosTicket);
+
     setMontoEnteroTeclado('0');
     setDescripcionVenta('');
     setToquesVentaActual(0);
@@ -1313,6 +1337,49 @@ export function App(): ReactElement {
             className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-950"
           >
             {aviso}
+          </div>
+        )}
+
+        {ultimaVentaParaTicket && (
+          <div
+            data-testid="banner-ticket-termico"
+            className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950 flex flex-wrap items-center justify-between gap-3 shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🖨</span>
+              <span>
+                Comprobante listo ({formatearPesos(ultimaVentaParaTicket.total)} - {ultimaVentaParaTicket.medioCobro}):
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 80 });
+                }}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+              >
+                Imprimir 80mm
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 58 });
+                }}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+              >
+                Imprimir 58mm
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUltimaVentaParaTicket(null);
+                }}
+                className="rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-300"
+              >
+                ✕ Cerrar
+              </button>
+            </div>
           </div>
         )}
 
@@ -2456,9 +2523,24 @@ export function App(): ReactElement {
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-800">
-              Ventas confirmadas por medio de cobro y rubro
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">
+                Ventas confirmadas por medio de cobro y rubro
+              </h3>
+              {ventasPorMedio.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const columnas = ['Medio de Cobro', 'Rubro', 'Total ($)'];
+                    const filas = ventasPorMedio.map((v) => [v.medioPago, v.rubro, v.total]);
+                    exportarACSV(`ventas_turno_${turnoId ?? 'actual'}`, columnas, filas);
+                  }}
+                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                >
+                  Exportar a Excel 📊
+                </button>
+              )}
+            </div>
             {ventasPorMedio.length === 0 ? (
               <p className="mt-2 text-xs text-slate-500">
                 Todavía no hay ventas confirmadas en este turno.

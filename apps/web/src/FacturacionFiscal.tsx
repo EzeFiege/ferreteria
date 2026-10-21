@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { formatearPesos } from './App.js';
 import { apiUrl } from './api-url.js';
+import { exportarACSV } from './utils/exportar-csv.js';
 import type {
   ComprobanteFiscalDetalle,
   CondicionIva,
@@ -189,6 +190,49 @@ export function FacturacionFiscal({
     }
   };
 
+  const exportarLibroIvaVentasCSV = (): void => {
+    if (comprobantes.length === 0) return;
+    const columnas = [
+      'Fecha Emisión',
+      'Punto Venta',
+      'Tipo Comprobante',
+      'Nº Comprobante',
+      'Cliente / Razón Social',
+      'CUIT Cliente',
+      'Condición IVA',
+      'Neto Gravado ($)',
+      'IVA 21% ($)',
+      'IVA 10.5% ($)',
+      'IVA 27% ($)',
+      'Exento ($)',
+      'Total ($)',
+      'Estado',
+      'CAE',
+      'Vencimiento CAE',
+    ];
+    const filas: (string | number | null | undefined)[][] = comprobantes.map((c) => [
+      c.fechaEmision,
+      c.puntoVentaNumero,
+      c.tipoComprobante,
+      c.numeroComprobante,
+      c.razonSocialCliente,
+      c.cuitCliente ?? '',
+      c.condicionIvaCliente,
+      c.subtotalNetoGravado,
+      c.subtotalIva21,
+      c.subtotalIva105,
+      c.subtotalIva27,
+      c.subtotalExento,
+      c.total,
+      c.estado,
+      c.cae ?? '',
+      c.vencimientoCae ?? '',
+    ]);
+
+    const hoy = new Date().toISOString().split('T')[0] ?? '';
+    exportarACSV(`libro_iva_ventas_${hoy}`, columnas, filas);
+  };
+
   return (
     <div className="space-y-6">
       {/* Alerta Superior */}
@@ -242,16 +286,27 @@ export function FacturacionFiscal({
 
         <div className="flex gap-2">
           {subpestana === 'comprobantes' && (
-            <button
-              type="button"
-              data-testid="btn-emitir-factura"
-              onClick={() => {
-                setModalEmitirFactura(true);
-              }}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700"
-            >
-              + Emitir Factura Electrónica
-            </button>
+            <>
+              {comprobantes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportarLibroIvaVentasCSV}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  Exportar Libro IVA 📊
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="btn-emitir-factura"
+                onClick={() => {
+                  setModalEmitirFactura(true);
+                }}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-emerald-700"
+              >
+                + Emitir Factura Electrónica
+              </button>
+            </>
           )}
 
           {subpestana === 'puntos_venta' && rolUsuario === 'dueno' && (

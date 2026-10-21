@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { formatearPesos } from './App.js';
 import { apiUrl } from './api-url.js';
+import { exportarACSV } from './utils/exportar-csv.js';
 import type {
   AsientoContableDetalle,
   CuentaContableItem,
@@ -279,6 +280,68 @@ export function Contabilidad({
   const balanceSumasCuadrado = totalDebitosCentavos === totalCreditosCentavos;
   const balanceSaldosCuadrado = totalSaldosDeudoresCentavos === totalSaldosAcreedoresCentavos;
 
+  const exportarLibroDiarioCSV = (): void => {
+    if (asientos.length === 0) return;
+    const columnas = [
+      'Nº Asiento',
+      'Fecha',
+      'Concepto',
+      'Origen',
+      'Código Cuenta',
+      'Cuenta Contable',
+      'Tipo Cuenta',
+      'Detalle Renglón',
+      'Debe ($)',
+      'Haber ($)',
+    ];
+    const filas: (string | number | null | undefined)[][] = [];
+
+    for (const a of asientos) {
+      for (const r of a.renglones) {
+        filas.push([
+          a.numero,
+          new Date(a.fecha).toLocaleString('es-AR'),
+          a.concepto,
+          a.origen,
+          r.cuentaCodigo,
+          r.cuentaNombre,
+          r.cuentaTipo,
+          r.descripcion ?? '',
+          r.debe,
+          r.haber,
+        ]);
+      }
+    }
+
+    const hoy = new Date().toISOString().split('T')[0] ?? '';
+    exportarACSV(`libro_diario_${hoy}`, columnas, filas);
+  };
+
+  const exportarSumasSaldosCSV = (): void => {
+    if (sumasSaldos.length === 0) return;
+    const columnas = [
+      'Código',
+      'Cuenta Contable',
+      'Tipo Cuenta',
+      'Total Débitos / Debe ($)',
+      'Total Créditos / Haber ($)',
+      'Saldo Deudor ($)',
+      'Saldo Acreedor ($)',
+    ];
+    const filas: (string | number)[][] = sumasSaldos.map((s) => [
+      s.cuentaCodigo,
+      s.cuentaNombre,
+      s.cuentaTipo,
+      s.totalDebe,
+      s.totalHaber,
+      s.saldoDeudor,
+      s.saldoAcreedor,
+    ]);
+
+    const hoy = new Date().toISOString().split('T')[0] ?? '';
+    exportarACSV(`balance_sumas_y_saldos_${hoy}`, columnas, filas);
+  };
+
   return (
     <section className="space-y-6">
       {/* Header y pestañas */}
@@ -433,15 +496,26 @@ export function Contabilidad({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                void cargarLibroDiario();
-              }}
-              className="rounded-md bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-900"
-            >
-              Filtrar
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void cargarLibroDiario();
+                }}
+                className="rounded-md bg-slate-800 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-900"
+              >
+                Filtrar
+              </button>
+              {asientos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportarLibroDiarioCSV}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  Exportar Libro Diario 📊
+                </button>
+              )}
+            </div>
           </div>
 
           {cargando ? (
@@ -544,6 +618,20 @@ export function Contabilidad({
       {/* 2. SUBPESTAÑA: SUMAS Y SALDOS (BALANCE DE COMPROBACIÓN) */}
       {subpestana === 'sumas_saldos' && (
         <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              Balance general de comprobación con saldos deudores y acreedores calculados en tiempo real.
+            </p>
+            {sumasSaldos.length > 0 && (
+              <button
+                type="button"
+                onClick={exportarSumasSaldosCSV}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Exportar Balance a Excel 📊
+              </button>
+            )}
+          </div>
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700">

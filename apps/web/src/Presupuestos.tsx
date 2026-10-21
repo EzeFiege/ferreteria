@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { formatearPesos } from './App.js';
 import { apiUrl } from './api-url.js';
+import { exportarACSV } from './utils/exportar-csv.js';
 import type {
   ItemCarrito,
   ListaPrecioItem,
@@ -351,6 +352,39 @@ export function Presupuestos({
     }
   };
 
+  const exportarPresupuestosCSV = (): void => {
+    if (presupuestos.length === 0) return;
+    const columnas = [
+      'Nº Presupuesto',
+      'Fecha Emisión',
+      'Fecha Vencimiento',
+      'Validez (Días)',
+      'Cliente / Contacto',
+      'Teléfono',
+      'Subtotal ($)',
+      'Descuento General ($)',
+      'Total ($)',
+      'Estado',
+      'Observaciones',
+    ];
+    const filas: (string | number | null | undefined)[][] = presupuestos.map((p) => [
+      p.numero,
+      new Date(p.fechaEmision).toLocaleDateString('es-AR'),
+      p.fechaVencimiento,
+      p.diasValidez,
+      p.nombreContacto ?? 'Consumidor',
+      p.telefonoContacto ?? '',
+      p.subtotal,
+      p.descuentoGeneral,
+      p.total,
+      p.estaVencido ? 'Vencido' : p.estado,
+      p.observaciones ?? '',
+    ]);
+
+    const hoy = new Date().toISOString().split('T')[0] ?? '';
+    exportarACSV(`presupuestos_${hoy}`, columnas, filas);
+  };
+
   return (
     <section className="space-y-6">
       {/* Header */}
@@ -369,7 +403,16 @@ export function Presupuestos({
           </p>
         </div>
 
-        <div>
+        <div className="flex items-center gap-2">
+          {presupuestos.length > 0 && (
+            <button
+              type="button"
+              onClick={exportarPresupuestosCSV}
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Exportar a Excel 📊
+            </button>
+          )}
           <button
             type="button"
             data-testid="btn-nuevo-presupuesto"

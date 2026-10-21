@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
+import { exportarACSV } from './utils/exportar-csv.js';
 
 export interface CajaFiltroItem {
   id: string;
@@ -199,6 +200,58 @@ export function ReportesHistorial({
     reporteDia?.totalesPorMedio.find((m) => m.medioPago === nombre)?.total ??
     '0.00';
 
+  const exportarReporteDiaCSV = (): void => {
+    if (!reporteDia) return;
+    const columnas = ['Fecha', 'Tipo', 'Detalle / Rubro / Categoría', 'Medio de Cobro', 'Total ($)'];
+    const filas: (string | number)[][] = [];
+
+    // Ventas por medio y rubro
+    for (const v of reporteDia.ventasPorMedioRubro) {
+      filas.push([reporteDia.fecha, 'Venta', v.rubro, v.medioPago, v.total]);
+    }
+
+    // Egresos por categoría
+    for (const eg of reporteDia.egresosPorCategoria) {
+      filas.push([reporteDia.fecha, 'Egreso', eg.categoria, eg.medioPago, eg.total]);
+    }
+
+    exportarACSV(`reporte_caja_${reporteDia.fecha}`, columnas, filas);
+  };
+
+  const exportarHistorialTurnosCSV = (): void => {
+    if (turnosHistorial.length === 0) return;
+    const columnas = [
+      'Turno ID',
+      'Caja',
+      'Cajero',
+      'Apertura',
+      'Cierre',
+      'Efectivo Inicial ($)',
+      'Entradas ($)',
+      'Salidas ($)',
+      'Efectivo Esperado ($)',
+      'Efectivo Contado ($)',
+      'Diferencia Arqueo ($)',
+      'Notas',
+    ];
+    const filas: (string | number | null | undefined)[][] = turnosHistorial.map((t: TurnoHistorialItem) => [
+      t.turnoId,
+      t.cajaNombre,
+      t.cajeroNombre,
+      t.abreEn ? new Date(t.abreEn).toLocaleString('es-AR') : '',
+      t.cierraEn ? new Date(t.cierraEn).toLocaleString('es-AR') : 'Abierto',
+      t.efectivoInicial,
+      t.entradasEfectivo,
+      t.salidasEfectivo,
+      t.efectivoEsperado,
+      t.efectivoContado ?? '0.00',
+      t.diferencia ?? '0.00',
+      t.notas ?? '',
+    ]);
+
+    exportarACSV(`historial_turnos_${fechaDesde}_al_${fechaHasta}`, columnas, filas);
+  };
+
   return (
     <div className="space-y-6" data-testid="panel-reportes-historial">
       {/* Barra de filtros por fecha, caja y cajero */}
@@ -342,12 +395,21 @@ export function ReportesHistorial({
               Reporte del Día ({reporteDia.fecha}) · {reporteDia.cantidadTurnos}{' '}
               turno(s)
             </h3>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-900">
-              Total Ventas del Día:{' '}
-              <span data-testid="reporte-dia-total-ventas">
-                {formatearPesos(reporteDia.totalVentasDia)}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={exportarReporteDiaCSV}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                Exportar Reporte a Excel 📊
+              </button>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-900">
+                Total Ventas del Día:{' '}
+                <span data-testid="reporte-dia-total-ventas">
+                  {formatearPesos(reporteDia.totalVentasDia)}
+                </span>
               </span>
-            </span>
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
@@ -536,9 +598,20 @@ export function ReportesHistorial({
 
       {/* Historial de Turnos (v_resumen_turno) */}
       <section className="rounded-2xl bg-white p-5 shadow-sm border border-slate-200">
-        <h3 className="text-base font-bold text-slate-900">
-          Historial de Turnos (v_resumen_turno)
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-bold text-slate-900">
+            Historial de Turnos (v_resumen_turno)
+          </h3>
+          {turnosHistorial.length > 0 && (
+            <button
+              type="button"
+              onClick={exportarHistorialTurnosCSV}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              Exportar Turnos a Excel 📊
+            </button>
+          )}
+        </div>
         {turnosHistorial.length === 0 ? (
           <p className="mt-2 text-xs text-slate-500">
             Sin turnos para los filtros aplicados.

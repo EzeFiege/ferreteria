@@ -276,6 +276,31 @@ Estado:
   - Modal de detalle con opción de impresión directa y botón de **"Cargar en Carrito y Vender 🛒"** que transfiere instantáneamente los materiales al mostrador de caja para facturar.
 - [x] Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `12. Presupuestos`.
 
+---
+
+## Fase 9 — Impresión Térmica ESC/POS (58mm/80mm) y Exportación a Excel/CSV (Completada ✅)
+
+Objetivo: dotar a todas las operaciones de mostrador y administración de comanderas térmicas de 58mm y 80mm para impresión de tickets no fiscales y comprobantes rápidos, y exportación masiva universal a planillas de cálculo (Excel / Google Sheets) con codificación UTF-8 con BOM y separador regional.
+
+Estado:
+- [x] Utilidad universal de tickets térmicos (`apps/web/src/utils/impresion-ticket.ts`):
+  - Formateo de tickets adaptados para comanderas térmicas de 58mm y 80mm.
+  - Reglas CSS `@page { size: 58mm/80mm auto; margin: 0; }` y fuentes monospace legibles.
+  - Encabezado con datos del comercio, número de comprobante, cajero, caja, cliente, tabla de ítems con cantidades, precios unitarios, subtotales, medios de pago y pie de control de garantía.
+  - Apertura en ventana emergente con disparo automático de `window.print()` y auto-cierre.
+- [x] Utilidad universal de exportación CSV/Excel (`apps/web/src/utils/exportar-csv.ts`):
+  - Soporte de caracteres en español (acentos, ñ, signos de pesos) mediante prefijo UTF-8 BOM (`\uFEFF`).
+  - Separador punto y coma (`;`) para apertura directa y nativa sin configuración en Microsoft Excel para Argentina / Latinoamérica y Google Sheets.
+  - Escape automático de comillas dobles y saltos de línea.
+- [x] Botones de exportación e impresión en pantallas clave:
+  - **Mostrador de Ventas (`App.tsx`)**: Banner tras cada venta para imprimir ticket térmico en 80mm o 58mm de inmediato; botón para exportar a Excel el resumen de ventas del turno actual.
+  - **Historial y Reportes (`ReportesHistorial.tsx`)**: Botones para exportar reporte de caja del día y el historial de turnos con arqueos a Excel.
+  - **Contabilidad (`Contabilidad.tsx`)**: Botones para exportar el Libro Diario completo y el Balance de Sumas y Saldos a Excel.
+  - **Facturación Fiscal (`FacturacionFiscal.tsx`)**: Botón para exportar el Libro IVA Ventas oficial a Excel.
+  - **Presupuestos (`Presupuestos.tsx`)**: Botón para exportar la lista de cotizaciones a Excel.
+- [x] Verificación completa: `pnpm typecheck`, `pnpm lint`, `pnpm test` (66 tests pasando) y `pnpm build` aprobados con cero errores.
+
+
 
 
 
