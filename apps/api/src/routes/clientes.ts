@@ -18,6 +18,7 @@ import {
   turnoCaja,
 } from '../db/schema.js';
 import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
+import { registrarAuditoria } from '../services/auditoria-service.js';
 import {
   assertRoles,
   authenticateRequest,
@@ -601,6 +602,22 @@ export function registerClientesRoutes(
             `select * from v_saldo_cliente where cliente_id = $1 and negocio_id = $2`,
             [id, claims.negocioId],
           );
+
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email,
+            rol: claims.rol,
+            accion: 'ajuste_cta_cte_cliente',
+            entidad: 'cliente',
+            entidadId: id,
+            detalles: {
+              tipo: body.tipo,
+              sentido,
+              monto: body.monto,
+              descripcion: body.descripcion,
+            },
+          });
 
           return {
             movimientoCtaCte: mov,

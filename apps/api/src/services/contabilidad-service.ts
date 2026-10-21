@@ -10,6 +10,7 @@ export const PLAN_CUENTAS_BASE = [
   { codigo: '2.1.01', nombre: 'Proveedores (Cta Cte)', tipo: 'pasivo', descripcion: 'Obligaciones y compras a pagar a proveedores' },
   { codigo: '2.1.02', nombre: 'IVA Débito Fiscal', tipo: 'pasivo', descripcion: 'IVA facturado en ventas' },
   { codigo: '3.1.01', nombre: 'Capital / Patrimonio Social', tipo: 'patrimonio_neto', descripcion: 'Patrimonio inicial y reservas' },
+  { codigo: '3.2.01', nombre: 'Resultado del Ejercicio', tipo: 'patrimonio_neto', descripcion: 'Ganancia o pérdida neta acumulada del período contable' },
   { codigo: '4.1.01', nombre: 'Ventas de Mercadería', tipo: 'ingreso', descripcion: 'Ingresos brutos por ventas de salón y mostrador' },
   { codigo: '4.1.02', nombre: 'Otros Ingresos Operativos', tipo: 'ingreso', descripcion: 'Ingresos financieros o extraordinarios' },
   { codigo: '5.1.01', nombre: 'Costo de Mercaderías Vendidas', tipo: 'egreso', descripcion: 'Costo de adquisición de los productos vendidos' },

@@ -4,8 +4,10 @@ import type { Pool } from 'pg';
 import { ZodError } from 'zod';
 import {
   crearAsientoManualSchema,
+  crearEjercicioContableSchema,
   guardarCuentaContableSchema,
   type AsientoContableDetalle,
+  type EjercicioContableItem,
   type ItemSumasYSaldos,
   type OrigenAsiento,
   type RenglonAsientoDetalle,
@@ -19,6 +21,7 @@ import {
 } from '../auth.js';
 import { withTenantTransaction } from '../db/context.js';
 import { cuentaContable } from '../db/schema.js';
+import { registrarAuditoria } from '../services/auditoria-service.js';
 
 export interface ContabilidadRoutesOptions extends FastifyPluginOptions {
   pool: Pool;
@@ -95,7 +98,11 @@ async function handleRouteError(
     });
   }
   const mensaje = err instanceof Error ? err.message : 'Error interno del servidor';
-  if (mensaje.includes('Violación contable') || mensaje.includes('Partida doble desbalanceada')) {
+  if (
+    mensaje.includes('Violación contable') ||
+    mensaje.includes('Partida doble desbalanceada') ||
+    mensaje.includes('ejercicio contable cerrado')
+  ) {
     return await reply.code(400).send({ error: mensaje });
   }
   request.log.error({ err, modulo: 'contabilidad' }, 'Error en ruta de contabilidad');
@@ -449,10 +456,561 @@ export function registerContabilidadRoutes(
           );
         }
 
+        // Registrar auditoría del asiento manual
+        await registrarAuditoria(client, {
+          negocioId: user.negocioId,
+          usuarioId: user.usuarioId,
+          usuarioEmail: user.email,
+          rol: user.rol,
+          accion: 'asiento_manual',
+          entidad: 'asiento_contable',
+          entidadId: asiento.id,
+          detalles: {
+            numero: asiento.numero,
+            concepto: asiento.concepto,
+            origen: asiento.origen,
+            totalDebe: (totalDebeCentavos / 100).toFixed(2),
+            totalHaber: (totalHaberCentavos / 100).toFixed(2),
+          },
+        });
+
         return asiento;
       });
 
       return await reply.code(201).send(creado);
+    } catch (err: unknown) {
+      return await handleRouteError(err, request, reply);
+    }
+  });
+
+  // 5. Listar ejercicios contables
+  app.get('/contabilidad/ejercicios', async (request, reply) => {
+    try {
+      const user = await authenticateRequest(request, verifyToken);
+      assertRoles(user, ['cajero', 'encargado', 'dueno']);
+
+      const ejercicios = await withTenantTransaction(pool, user.negocioId, async ({ client }) => {
+        const res = await client.query<{
+          id: string;
+          numero: number;
+          nombre: string;
+          fecha_inicio: string;
+          fecha_fin: string;
+          estado: 'abierto' | 'cerrado';
+          asiento_refundicion_id: string | null;
+          asiento_cierre_id: string | null;
+          cerrado_por: string | null;
+          cerrado_en: Date | null;
+          creado_en: Date;
+        }>(
+          `select
+            id,
+            numero,
+            nombre,
+            to_char(fecha_inicio, 'YYYY-MM-DD') as fecha_inicio,
+            to_char(fecha_fin, 'YYYY-MM-DD') as fecha_fin,
+            estado,
+            asiento_refundicion_id,
+            asiento_cierre_id,
+            cerrado_por,
+            cerrado_en,
+            creado_en
+          from ejercicio_contable
+          where negocio_id = $1
+          order by numero desc`,
+          [user.negocioId],
+        );
+
+        return res.rows.map((r): EjercicioContableItem => ({
+          id: r.id,
+          numero: r.numero,
+          nombre: r.nombre,
+          fechaInicio: r.fecha_inicio,
+          fechaFin: r.fecha_fin,
+          estado: r.estado,
+          asientoRefundicionId: r.asiento_refundicion_id,
+          asientoCierreId: r.asiento_cierre_id,
+          cerradoPor: r.cerrado_por,
+          cerradoEn: r.cerrado_en ? r.cerrado_en.toISOString() : null,
+          creadoEn: r.creado_en.toISOString(),
+        }));
+      });
+
+      return await reply.send(ejercicios);
+    } catch (err: unknown) {
+      return await handleRouteError(err, request, reply);
+    }
+  });
+
+  // 6. Crear / Abrir nuevo ejercicio contable
+  app.post('/contabilidad/ejercicios', async (request, reply) => {
+    try {
+      const user = await authenticateRequest(request, verifyToken);
+      assertRoles(user, ['encargado', 'dueno']);
+
+      const input = crearEjercicioContableSchema.parse(request.body);
+
+      if (input.fechaFin < input.fechaInicio) {
+        return await reply.code(400).send({
+          error: 'La fecha de fin no puede ser anterior a la fecha de inicio',
+        });
+      }
+
+      const creado = await withTenantTransaction(pool, user.negocioId, async ({ client }) => {
+        await client.query(`select pg_advisory_xact_lock(hashtext('ejercicio_contable_' || $1))`, [
+          user.negocioId,
+        ]);
+
+        const numRes = await client.query<{ proximo_numero: number }>(
+          `select coalesce(max(numero), 0) + 1 as proximo_numero
+           from ejercicio_contable
+           where negocio_id = $1`,
+          [user.negocioId],
+        );
+        const numero = input.numero ?? (numRes.rows[0]?.proximo_numero ?? 1);
+
+        const res = await client.query<{
+          id: string;
+          numero: number;
+          nombre: string;
+          fecha_inicio: string;
+          fecha_fin: string;
+          estado: 'abierto' | 'cerrado';
+          asiento_refundicion_id: string | null;
+          asiento_cierre_id: string | null;
+          cerrado_por: string | null;
+          cerrado_en: Date | null;
+          creado_en: Date;
+        }>(
+          `insert into ejercicio_contable (
+            negocio_id, numero, nombre, fecha_inicio, fecha_fin, estado
+          ) values ($1, $2, $3, $4, $5, 'abierto')
+          returning
+            id,
+            numero,
+            nombre,
+            to_char(fecha_inicio, 'YYYY-MM-DD') as fecha_inicio,
+            to_char(fecha_fin, 'YYYY-MM-DD') as fecha_fin,
+            estado,
+            asiento_refundicion_id,
+            asiento_cierre_id,
+            cerrado_por,
+            cerrado_en,
+            creado_en`,
+          [user.negocioId, numero, input.nombre, input.fechaInicio, input.fechaFin],
+        );
+
+        const ej = res.rows[0];
+        if (!ej) {
+          throw new Error('Error al registrar ejercicio contable');
+        }
+
+        await registrarAuditoria(client, {
+          negocioId: user.negocioId,
+          usuarioId: user.usuarioId,
+          usuarioEmail: user.email,
+          rol: user.rol,
+          accion: 'apertura_ejercicio',
+          entidad: 'ejercicio_contable',
+          entidadId: ej.id,
+          detalles: {
+            numero: ej.numero,
+            nombre: ej.nombre,
+            fechaInicio: ej.fecha_inicio,
+            fechaFin: ej.fecha_fin,
+          },
+        });
+
+        return {
+          id: ej.id,
+          numero: ej.numero,
+          nombre: ej.nombre,
+          fechaInicio: ej.fecha_inicio,
+          fechaFin: ej.fecha_fin,
+          estado: ej.estado,
+          asientoRefundicionId: ej.asiento_refundicion_id,
+          asientoCierreId: ej.asiento_cierre_id,
+          cerradoPor: ej.cerrado_por,
+          cerradoEn: ej.cerrado_en ? ej.cerrado_en.toISOString() : null,
+          creadoEn: ej.creado_en.toISOString(),
+        };
+      });
+
+      return await reply.code(201).send(creado);
+    } catch (err: unknown) {
+      return await handleRouteError(err, request, reply);
+    }
+  });
+
+  // 7. Cerrar ejercicio contable (Asiento de refundición + Asiento de cierre patrimonial)
+  app.post<{ Params: { id: string } }>('/contabilidad/ejercicios/:id/cerrar', async (request, reply) => {
+    try {
+      const user = await authenticateRequest(request, verifyToken);
+      assertRoles(user, ['encargado', 'dueno']);
+
+      const { id } = request.params;
+
+      const resultado = await withTenantTransaction(pool, user.negocioId, async ({ client }) => {
+        // Bloqueo advisory lock para evitar cierres concurrentes
+        await client.query(`select pg_advisory_xact_lock(hashtext('cierre_ejercicio_' || $1))`, [
+          user.negocioId,
+        ]);
+
+        const ejRes = await client.query<{
+          id: string;
+          numero: number;
+          nombre: string;
+          fecha_inicio: string;
+          fecha_fin: string;
+          estado: 'abierto' | 'cerrado';
+        }>(
+          `select
+            id,
+            numero,
+            nombre,
+            to_char(fecha_inicio, 'YYYY-MM-DD') as fecha_inicio,
+            to_char(fecha_fin, 'YYYY-MM-DD') as fecha_fin,
+            estado
+          from ejercicio_contable
+          where id = $1 and negocio_id = $2`,
+          [id, user.negocioId],
+        );
+
+        const ejercicio = ejRes.rows[0];
+        if (!ejercicio) {
+          throw new Error('Ejercicio contable no encontrado');
+        }
+
+        if (ejercicio.estado === 'cerrado') {
+          throw new Error('El ejercicio contable ya se encuentra cerrado');
+        }
+
+        // Asegurar cuenta de Resultado del Ejercicio (3.2.01)
+        let cuentaResultadoId: string | null = null;
+        const cRes = await client.query<{ id: string }>(
+          `select id from cuenta_contable where negocio_id = $1 and codigo = '3.2.01'`,
+          [user.negocioId],
+        );
+        if (cRes.rows[0]) {
+          cuentaResultadoId = cRes.rows[0].id;
+        } else {
+          const insRes = await client.query<{ id: string }>(
+            `insert into cuenta_contable (negocio_id, codigo, nombre, tipo, descripcion, activa)
+             values ($1, '3.2.01', 'Resultado del Ejercicio', 'patrimonio_neto', 'Ganancia o pérdida neta acumulada del período contable', true)
+             returning id`,
+            [user.negocioId],
+          );
+          const insFila = insRes.rows[0];
+          if (!insFila) {
+            throw new Error('Error al inicializar cuenta de resultado del ejercicio');
+          }
+          cuentaResultadoId = insFila.id;
+        }
+
+        // 1. Calcular saldos de cuentas de resultado (ingreso / egreso) dentro del período del ejercicio
+        const saldosResultadoRes = await client.query<{
+          cuenta_id: string;
+          cuenta_codigo: string;
+          cuenta_nombre: string;
+          cuenta_tipo: 'ingreso' | 'egreso';
+          total_debe: string;
+          total_haber: string;
+        }>(
+          `select
+            c.id as cuenta_id,
+            c.codigo as cuenta_codigo,
+            c.nombre as cuenta_nombre,
+            c.tipo as cuenta_tipo,
+            coalesce(sum(r.debe), 0)::numeric(14,2) as total_debe,
+            coalesce(sum(r.haber), 0)::numeric(14,2) as total_haber
+          from cuenta_contable c
+          join renglon_asiento r on r.cuenta_id = c.id and r.negocio_id = c.negocio_id
+          join asiento_contable a on a.id = r.asiento_id and a.negocio_id = r.negocio_id
+          where c.negocio_id = $1
+            and a.fecha::date between $2 and $3
+            and c.tipo in ('ingreso', 'egreso')
+          group by c.id, c.codigo, c.nombre, c.tipo`,
+          [user.negocioId, ejercicio.fecha_inicio, ejercicio.fecha_fin],
+        );
+
+        let asientoRefundicionId: string | null = null;
+        let resultadoNetoCentavos = 0;
+
+        const renglonesRefundicion: Array<{
+          cuentaId: string;
+          debe: string;
+          haber: string;
+          descripcion: string;
+        }> = [];
+
+        let sumaDebitosRefundicion = 0;
+        let sumaCreditosRefundicion = 0;
+
+        for (const row of saldosResultadoRes.rows) {
+          const d = Math.round(Number(row.total_debe) * 100);
+          const h = Math.round(Number(row.total_haber) * 100);
+
+          if (row.cuenta_tipo === 'ingreso') {
+            const saldoAcreedor = h - d;
+            if (saldoAcreedor > 0) {
+              renglonesRefundicion.push({
+                cuentaId: row.cuenta_id,
+                debe: (saldoAcreedor / 100).toFixed(2),
+                haber: '0.00',
+                descripcion: `Refundición saldo acreedor ${row.cuenta_codigo}`,
+              });
+              sumaDebitosRefundicion += saldoAcreedor;
+              resultadoNetoCentavos += saldoAcreedor;
+            } else if (saldoAcreedor < 0) {
+              const abs = Math.abs(saldoAcreedor);
+              renglonesRefundicion.push({
+                cuentaId: row.cuenta_id,
+                debe: '0.00',
+                haber: (abs / 100).toFixed(2),
+                descripcion: `Refundición saldo ${row.cuenta_codigo}`,
+              });
+              sumaCreditosRefundicion += abs;
+              resultadoNetoCentavos -= abs;
+            }
+          } else {
+            const saldoDeudor = d - h;
+            if (saldoDeudor > 0) {
+              renglonesRefundicion.push({
+                cuentaId: row.cuenta_id,
+                debe: '0.00',
+                haber: (saldoDeudor / 100).toFixed(2),
+                descripcion: `Refundición saldo deudor ${row.cuenta_codigo}`,
+              });
+              sumaCreditosRefundicion += saldoDeudor;
+              resultadoNetoCentavos -= saldoDeudor;
+            } else if (saldoDeudor < 0) {
+              const abs = Math.abs(saldoDeudor);
+              renglonesRefundicion.push({
+                cuentaId: row.cuenta_id,
+                debe: (abs / 100).toFixed(2),
+                haber: '0.00',
+                descripcion: `Refundición saldo ${row.cuenta_codigo}`,
+              });
+              sumaDebitosRefundicion += abs;
+              resultadoNetoCentavos += abs;
+            }
+          }
+        }
+
+        // Si hubo movimientos de resultado, balanceamos contra Resultado del Ejercicio
+        if (renglonesRefundicion.length > 0) {
+          if (resultadoNetoCentavos > 0) {
+            // Ganancia neta: se acredita Resultado del Ejercicio
+            renglonesRefundicion.push({
+              cuentaId: cuentaResultadoId,
+              debe: '0.00',
+              haber: (resultadoNetoCentavos / 100).toFixed(2),
+              descripcion: 'Ganancia neta acumulada del ejercicio',
+            });
+            sumaCreditosRefundicion += resultadoNetoCentavos;
+          } else if (resultadoNetoCentavos < 0) {
+            // Pérdida neta: se debita Resultado del Ejercicio
+            const abs = Math.abs(resultadoNetoCentavos);
+            renglonesRefundicion.push({
+              cuentaId: cuentaResultadoId,
+              debe: (abs / 100).toFixed(2),
+              haber: '0.00',
+              descripcion: 'Pérdida neta acumulada del ejercicio',
+            });
+            sumaDebitosRefundicion += abs;
+          }
+
+          if (sumaDebitosRefundicion === sumaCreditosRefundicion && sumaDebitosRefundicion > 0) {
+            const numRes = await client.query<{ proximo_numero: number }>(
+              `select coalesce(max(numero), 0) + 1 as proximo_numero
+               from asiento_contable
+               where negocio_id = $1`,
+              [user.negocioId],
+            );
+            const numeroAsiento = numRes.rows[0]?.proximo_numero ?? 1;
+
+            const refundicionAsientoRes = await client.query<{ id: string }>(
+              `insert into asiento_contable (
+                negocio_id, numero, fecha, concepto, origen, referencia_id, creado_por
+              ) values ($1, $2, $3, $4, 'refundicion_resultados', $5, $6)
+              returning id`,
+              [
+                user.negocioId,
+                numeroAsiento,
+                new Date(`${ejercicio.fecha_fin}T23:59:59Z`),
+                `Refundición de cuentas de resultado - ${ejercicio.nombre}`,
+                ejercicio.id,
+                user.usuarioId,
+              ],
+            );
+            const refFila = refundicionAsientoRes.rows[0];
+            if (!refFila) {
+              throw new Error('Error al registrar asiento de refundición');
+            }
+            asientoRefundicionId = refFila.id;
+
+            for (const r of renglonesRefundicion) {
+              await client.query(
+                `insert into renglon_asiento (
+                  asiento_id, negocio_id, cuenta_id, debe, haber, descripcion
+                ) values ($1, $2, $3, $4, $5, $6)`,
+                [asientoRefundicionId, user.negocioId, r.cuentaId, r.debe, r.haber, r.descripcion],
+              );
+            }
+          }
+        }
+
+        // 2. Asiento de Cierre Patrimonial (Saldado de Activo, Pasivo y Patrimonio Neto)
+        let asientoCierreId: string | null = null;
+        const saldosPatrimonialesRes = await client.query<{
+          cuenta_id: string;
+          cuenta_codigo: string;
+          cuenta_nombre: string;
+          cuenta_tipo: 'activo' | 'pasivo' | 'patrimonio_neto';
+          total_debe: string;
+          total_haber: string;
+        }>(
+          `select
+            c.id as cuenta_id,
+            c.codigo as cuenta_codigo,
+            c.nombre as cuenta_nombre,
+            c.tipo as cuenta_tipo,
+            coalesce(sum(r.debe), 0)::numeric(14,2) as total_debe,
+            coalesce(sum(r.haber), 0)::numeric(14,2) as total_haber
+          from cuenta_contable c
+          join renglon_asiento r on r.cuenta_id = c.id and r.negocio_id = c.negocio_id
+          join asiento_contable a on a.id = r.asiento_id and a.negocio_id = r.negocio_id
+          where c.negocio_id = $1
+            and a.fecha::date <= $2
+            and c.tipo in ('activo', 'pasivo', 'patrimonio_neto')
+          group by c.id, c.codigo, c.nombre, c.tipo`,
+          [user.negocioId, ejercicio.fecha_fin],
+        );
+
+        const renglonesCierre: Array<{
+          cuentaId: string;
+          debe: string;
+          haber: string;
+          descripcion: string;
+        }> = [];
+
+        let sumaDebitosCierre = 0;
+        let sumaCreditosCierre = 0;
+
+        for (const row of saldosPatrimonialesRes.rows) {
+          const d = Math.round(Number(row.total_debe) * 100);
+          const h = Math.round(Number(row.total_haber) * 100);
+
+          if (d === h) continue;
+
+          if (d > h) {
+            // Cuenta con saldo deudor: para saldarla en el cierre patrimonial se ACREDITA
+            const diff = d - h;
+            renglonesCierre.push({
+              cuentaId: row.cuenta_id,
+              debe: '0.00',
+              haber: (diff / 100).toFixed(2),
+              descripcion: `Cierre patrimonial saldo deudor ${row.cuenta_codigo}`,
+            });
+            sumaCreditosCierre += diff;
+          } else {
+            // Cuenta con saldo acreedor: para saldarla en el cierre patrimonial se DEBITA
+            const diff = h - d;
+            renglonesCierre.push({
+              cuentaId: row.cuenta_id,
+              debe: (diff / 100).toFixed(2),
+              haber: '0.00',
+              descripcion: `Cierre patrimonial saldo acreedor ${row.cuenta_codigo}`,
+            });
+            sumaDebitosCierre += diff;
+          }
+        }
+
+        if (renglonesCierre.length > 0 && sumaDebitosCierre === sumaCreditosCierre) {
+          const numCierreRes = await client.query<{ proximo_numero: number }>(
+            `select coalesce(max(numero), 0) + 1 as proximo_numero
+             from asiento_contable
+             where negocio_id = $1`,
+            [user.negocioId],
+          );
+          const numeroCierre = numCierreRes.rows[0]?.proximo_numero ?? 1;
+
+          const cierreAsientoRes = await client.query<{ id: string }>(
+            `insert into asiento_contable (
+              negocio_id, numero, fecha, concepto, origen, referencia_id, creado_por
+            ) values ($1, $2, $3, $4, 'cierre_ejercicio', $5, $6)
+            returning id`,
+            [
+              user.negocioId,
+              numeroCierre,
+              new Date(`${ejercicio.fecha_fin}T23:59:59Z`),
+              `Cierre formal de cuentas patrimoniales - ${ejercicio.nombre}`,
+              ejercicio.id,
+              user.usuarioId,
+            ],
+          );
+          const cieFila = cierreAsientoRes.rows[0];
+          if (!cieFila) {
+            throw new Error('Error al registrar asiento de cierre patrimonial');
+          }
+          asientoCierreId = cieFila.id;
+
+          for (const r of renglonesCierre) {
+            await client.query(
+              `insert into renglon_asiento (
+                asiento_id, negocio_id, cuenta_id, debe, haber, descripcion
+              ) values ($1, $2, $3, $4, $5, $6)`,
+              [asientoCierreId, user.negocioId, r.cuentaId, r.debe, r.haber, r.descripcion],
+            );
+          }
+        }
+
+        // 3. Actualizar estado del ejercicio a 'cerrado'
+        await client.query(
+          `update ejercicio_contable
+           set estado = 'cerrado',
+               asiento_refundicion_id = $1,
+               asiento_cierre_id = $2,
+               cerrado_por = $3,
+               cerrado_en = now()
+           where id = $4 and negocio_id = $5`,
+          [asientoRefundicionId, asientoCierreId, user.usuarioId, ejercicio.id, user.negocioId],
+        );
+
+        // 4. Registrar en Auditoría Centralizada
+        await registrarAuditoria(client, {
+          negocioId: user.negocioId,
+          usuarioId: user.usuarioId,
+          usuarioEmail: user.email,
+          rol: user.rol,
+          accion: 'cierre_ejercicio',
+          entidad: 'ejercicio_contable',
+          entidadId: ejercicio.id,
+          detalles: {
+            numero: ejercicio.numero,
+            nombre: ejercicio.nombre,
+            fechaInicio: ejercicio.fecha_inicio,
+            fechaFin: ejercicio.fecha_fin,
+            asientoRefundicionId,
+            asientoCierreId,
+            resultadoNeto: (resultadoNetoCentavos / 100).toFixed(2),
+          },
+        });
+
+        return {
+          id: ejercicio.id,
+          numero: ejercicio.numero,
+          nombre: ejercicio.nombre,
+          fechaInicio: ejercicio.fecha_inicio,
+          fechaFin: ejercicio.fecha_fin,
+          estado: 'cerrado' as const,
+          asientoRefundicionId,
+          asientoCierreId,
+          resultadoNeto: (resultadoNetoCentavos / 100).toFixed(2),
+        };
+      });
+
+      return await reply.send(resultado);
     } catch (err: unknown) {
       return await handleRouteError(err, request, reply);
     }

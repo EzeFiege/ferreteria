@@ -617,6 +617,8 @@ export const origenAsientoSchema = z.enum([
   'deposito_cheque',
   'ajuste',
   'manual',
+  'cierre_ejercicio',
+  'refundicion_resultados',
 ]);
 export type OrigenAsiento = z.infer<typeof origenAsientoSchema>;
 
@@ -778,3 +780,87 @@ export interface PresupuestoDetalle {
   creadoEn: string;
   items: ItemPresupuestoDetalle[];
 }
+
+// -------------------------------------------------------------
+// Fase 11 — Auditoría Centralizada y Cierre de Ejercicio
+// -------------------------------------------------------------
+
+export const accionAuditoriaSchema = z.enum([
+  'anulacion_venta',
+  'arqueo_caja',
+  'ajuste_cta_cte_cliente',
+  'ajuste_cta_cte_proveedor',
+  'cambio_precio',
+  'cierre_ejercicio',
+  'apertura_ejercicio',
+  'cheque_rechazado',
+  'asiento_manual',
+]);
+export type AccionAuditoria = z.infer<typeof accionAuditoriaSchema>;
+
+export const entidadAuditoriaSchema = z.enum([
+  'venta',
+  'turno_caja',
+  'cliente',
+  'proveedor',
+  'articulo',
+  'ejercicio_contable',
+  'cheque',
+  'asiento_contable',
+]);
+export type EntidadAuditoria = z.infer<typeof entidadAuditoriaSchema>;
+
+export const filtroAuditoriaSchema = z.object({
+  desde: z.string().optional(),
+  hasta: z.string().optional(),
+  accion: accionAuditoriaSchema.optional(),
+  entidad: entidadAuditoriaSchema.optional(),
+  usuarioId: z.string().optional(),
+  limite: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type FiltroAuditoriaInput = z.infer<typeof filtroAuditoriaSchema>;
+
+export interface RegistroAuditoriaItem {
+  id: string;
+  negocioId: string;
+  usuarioId: string;
+  usuarioEmail: string | null;
+  rol: string;
+  accion: AccionAuditoria;
+  entidad: EntidadAuditoria;
+  entidadId: string | null;
+  detalles: Record<string, unknown>;
+  creadoEn: string;
+}
+
+export const estadoEjercicioSchema = z.enum(['abierto', 'cerrado']);
+export type EstadoEjercicio = z.infer<typeof estadoEjercicioSchema>;
+
+export const crearEjercicioContableSchema = z.object({
+  numero: z.number().int().positive().optional(),
+  nombre: z.string().trim().min(3).max(100),
+  fechaInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato AAAA-MM-DD requerido'),
+  fechaFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato AAAA-MM-DD requerido'),
+});
+export type CrearEjercicioContableInput = z.infer<typeof crearEjercicioContableSchema>;
+
+export const cerrarEjercicioContableSchema = z.object({
+  ejercicioId: uuidSchema,
+  concepto: z.string().max(250).optional(),
+});
+export type CerrarEjercicioContableInput = z.infer<typeof cerrarEjercicioContableSchema>;
+
+export interface EjercicioContableItem {
+  id: string;
+  numero: number;
+  nombre: string;
+  fechaInicio: string;
+  fechaFin: string;
+  estado: EstadoEjercicio;
+  asientoRefundicionId: string | null;
+  asientoCierreId: string | null;
+  cerradoPor: string | null;
+  cerradoEn: string | null;
+  creadoEn: string;
+}
+

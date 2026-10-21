@@ -11,6 +11,7 @@ import {
 } from '@ferreteria/shared';
 import { withTenantTransaction } from '../db/context.js';
 import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
+import { registrarAuditoria } from '../services/auditoria-service.js';
 import {
   categoria,
   itemOrdenCompra,
@@ -547,7 +548,7 @@ export function registerComprasRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           const [p] = await db
             .select()
             .from(proveedor)
@@ -575,6 +576,22 @@ export function registerComprasRoutes(
               creadoPor: claims.usuarioId,
             })
             .returning();
+
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email,
+            rol: claims.rol,
+            accion: 'ajuste_cta_cte_proveedor',
+            entidad: 'proveedor',
+            entidadId: id,
+            detalles: {
+              tipo: body.tipo,
+              sentido,
+              monto: body.monto,
+              descripcion: body.descripcion,
+            },
+          });
 
           return mov;
         },

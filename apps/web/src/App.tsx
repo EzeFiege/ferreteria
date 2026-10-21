@@ -24,6 +24,7 @@ import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 import { FacturacionFiscal } from './FacturacionFiscal.js';
 import { Contabilidad } from './Contabilidad.js';
 import { Presupuestos } from './Presupuestos.js';
+import { AuditoriaSistema } from './AuditoriaSistema.js';
 import { InicioDashboard } from './InicioDashboard.js';
 import {
   imprimirTicketTermico,
@@ -261,6 +262,7 @@ export function App(): ReactElement {
     | 'facturacion'
     | 'contabilidad'
     | 'presupuestos'
+    | 'auditoria'
   >('inicio');
   const [sidebarAbierto, setSidebarAbierto] = useState<boolean>(false);
 
@@ -1528,6 +1530,23 @@ export function App(): ReactElement {
 
               <button
                 type="button"
+                data-testid="tab-auditoria"
+                onClick={() => {
+                  setPestana('auditoria');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'auditoria'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🛡️</span>
+                <span>Auditoría del Sistema</span>
+              </button>
+
+              <button
+                type="button"
                 data-testid="tab-configuracion"
                 onClick={() => {
                   setPestana('configuracion');
@@ -1884,6 +1903,13 @@ export function App(): ReactElement {
               }
             }}
             onCatalogosActualizados={recargarContextoMostrador}
+          />
+        )}
+
+        {pestana === 'auditoria' && (
+          <AuditoriaSistema
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
           />
         )}
 

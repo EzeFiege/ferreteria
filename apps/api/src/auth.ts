@@ -11,6 +11,7 @@ const rawTokenClaimsSchema = z.object({
   usuario_id: uuidSchema,
   rol: rolUsuarioSchema,
   uid: z.string().optional(),
+  email: z.string().optional(),
 });
 
 export interface AuthClaims {
@@ -18,6 +19,7 @@ export interface AuthClaims {
   usuarioId: string;
   rol: RolUsuario;
   uid?: string | undefined;
+  email?: string | undefined;
 }
 
 export type TokenVerifier = (
@@ -66,6 +68,7 @@ export function defaultVerifyToken(token: string): AuthClaims {
     usuarioId: parsed.data.usuario_id,
     rol: parsed.data.rol,
     uid: parsed.data.uid,
+    email: parsed.data.email,
   };
 }
 
@@ -77,6 +80,7 @@ export function createAuthToken(claims: {
   usuario_id: string;
   rol: RolUsuario;
   uid?: string;
+  email?: string;
 }): string {
   const header = Buffer.from(
     JSON.stringify({ alg: 'none', typ: 'JWT' }),

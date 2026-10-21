@@ -351,6 +351,9 @@ describe('Fase 7 — Contabilidad (Plan de cuentas, Libro Diario, Sumas y Saldos
     );
     const medioEfectivoId = mediosRes.rows[0]?.id;
     expect(medioEfectivoId).toBeDefined();
+    if (!medioEfectivoId) {
+      throw new Error('Medio de pago efectivo no encontrado');
+    }
 
     const catRes = await adminPool.query<{ id: string }>(
       "select id from categoria where negocio_id = $1 and tipo = 'egreso' limit 1",
@@ -371,7 +374,7 @@ describe('Fase 7 — Contabilidad (Plan de cuentas, Libro Diario, Sumas y Saldos
         pagos: [
           {
             movimientoId: randomUUID(),
-            medioPagoId: medioEfectivoId!,
+            medioPagoId: medioEfectivoId,
             monto: '2500.00',
             descripcion: 'Venta de prueba para asiento contable',
           },
@@ -389,7 +392,7 @@ describe('Fase 7 — Contabilidad (Plan de cuentas, Libro Diario, Sumas y Saldos
         id: randomUUID(),
         turnoId: turno.turno.id,
         monto: '500.00',
-        medioPagoId: medioEfectivoId!,
+        medioPagoId: medioEfectivoId,
         categoriaId,
         descripcion: 'Compra de artículos de limpieza',
       },

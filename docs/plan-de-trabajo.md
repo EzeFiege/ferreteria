@@ -346,6 +346,36 @@ Estado:
   - **Barra de Navegación Inferior (Bottom Nav)**: Para celulares y tabletas PWA con accesos rápidos a Inicio, Vender, Cotizar, Stock y Menú lateral.
 - [x] Compatibilidad total con tests existentes: todos los `data-testid` se mantuvieron intactos.
 
+---
+
+## Fase 11 — Auditoría Centralizada y Cierre de Ejercicio Contable (Completada ✅)
+
+Objetivo: dotar al sistema de trazabilidad rigurosa e inmutable de todas las acciones sensibles (anulaciones de ventas, arqueos con diferencias, ajustes de cuenta corriente, cambios de precio, aperturas y cierres contables), junto con un asistente formal de Cierre de Ejercicio Económico con asientos automáticos de refundición de pérdidas y ganancias y cierre patrimonial.
+
+Estado:
+- [x] Migración `010_auditoria_cierre_ejercicio.sql`:
+  - Tabla inmutable `registro_auditoria`: multi-tenant con clave compuesta `(id, negocio_id)`, datos del operador, acción, entidad, entidad_id, detalles JSONB y trigger SQL `tg_registro_auditoria_inmutable` que prohíbe `UPDATE` y `DELETE`.
+  - Tabla `ejercicio_contable`: períodos contables numerados correlativamente con bloqueo advisory lock por tenant, fechas `fecha_inicio` y `fecha_fin`, estado (`abierto`, `cerrado`), vínculos a asientos de refundición y cierre patrimonial.
+  - Trigger SQL `tg_asiento_contable_ejercicio_abierto`: bloquea preventivamente a nivel de base de datos la inserción de cualquier asiento contable cuya fecha pertenezca a un ejercicio contable cerrado.
+  - RLS activo para aislar estrictamente por negocio.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `accionAuditoriaSchema`, `entidadAuditoriaSchema`, `filtroAuditoriaSchema` y tipo `RegistroAuditoriaItem`.
+  - `crearEjercicioContableSchema`, `cerrarEjercicioContableSchema`, `estadoEjercicioSchema` y tipo `EjercicioContableItem`.
+  - Ampliación de `origenAsientoSchema` incorporando `'cierre_ejercicio'` y `'refundicion_resultados'`.
+- [x] Servicio de auditoría y endpoints en API (`apps/api`):
+  - Helper centralizado `registrarAuditoria(...)` (`apps/api/src/services/auditoria-service.ts`) transaccional y consistente.
+  - Endpoint `GET /auditoria` con filtros por acción, entidad, fechas y operador, restringido estrictamente a roles `encargado` y `dueno`.
+  - Endpoints contables: `GET /contabilidad/ejercicios`, `POST /contabilidad/ejercicios` (apertura) y `POST /contabilidad/ejercicios/:id/cerrar` (asiento automático de refundición de cuentas de resultado contra *3.2.01 Resultado del Ejercicio* y asiento de cierre patrimonial).
+  - Trazabilidad automática integrada en: reversión/anulación de ventas (`caja.ts`), arqueos y cierres de turno (`caja.ts`), ajustes de clientes (`clientes.ts`), ajustes de proveedores (`compras.ts`) y asientos manuales (`contabilidad.ts`).
+- [x] Suite de tests de integración (`apps/api/src/routes/auditoria-cierre.test.ts`):
+  - 6 pruebas de integración pasando al 100% en PostgreSQL 16 real con Testcontainers (inmutabilidad por triggers, permisos por rol, trazabilidad de arqueos con diferencias, refundición contable exacta y bloqueo de períodos cerrados, aislamiento multi-tenant).
+- [x] Interfaz Web (`apps/web`):
+  - Nueva pantalla **Auditoría del Sistema** (`apps/web/src/AuditoriaSistema.tsx`): visor cronológico, filtros por tipo de acción y fechas, badge temático, visualizador modal de JSON de transacción y botón para **Exportar a Excel / CSV** con UTF-8 BOM.
+  - Subpestaña **"4. Ejercicios & Cierre"** en Contabilidad (`apps/web/src/Contabilidad.tsx`): directorio de ejercicios fiscales, modal para apertura de nuevo período y asistente de cierre de ejercicio con confirmación formal y resumen del resultado neto refundido.
+  - Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `🛡️ Auditoría del Sistema` en la sección "Control & Sistema".
+- [x] Verificación de calidad: `pnpm typecheck`, `pnpm lint`, `pnpm build` y suite completa de tests de Vitest (14 archivos, 73 tests pasando al 100% contra PostgreSQL real).
+
+
 
 
 

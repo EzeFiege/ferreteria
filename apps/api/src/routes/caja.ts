@@ -21,6 +21,7 @@ import {
 } from '../auth.js';
 import { withTenantTransaction } from '../db/context.js';
 import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
+import { registrarAuditoria } from '../services/auditoria-service.js';
 import {
   caja,
   categoria,
@@ -719,7 +720,7 @@ export function registerCajaRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           // Si ya existe el movimiento de reversión con este mismo ID (reintento idempotente)
           const [reversionPrevia] = await db
             .select()
@@ -776,6 +777,24 @@ export function registerCajaRoutes(
 
           if (reversionActual === undefined) {
             throw new AuthError('No se pudo registrar la reversión', 409);
+          }
+
+          if (inserted.length > 0) {
+            await registrarAuditoria(client, {
+              negocioId: claims.negocioId,
+              usuarioId: claims.usuarioId,
+              usuarioEmail: claims.email,
+              rol: claims.rol,
+              accion: 'anulacion_venta',
+              entidad: 'venta',
+              entidadId: original.ventaId ?? original.id,
+              detalles: {
+                movimientoOriginalId: original.id,
+                reversionId: reversionActual.id,
+                monto: reversionActual.monto,
+                motivo: body.descripcion ?? null,
+              },
+            });
           }
 
           request.log.info(
@@ -858,6 +877,22 @@ export function registerCajaRoutes(
           }
 
           const resumen = mapResumenTurno(filaResumen);
+
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email,
+            rol: claims.rol,
+            accion: 'arqueo_caja',
+            entidad: 'turno_caja',
+            entidadId: turnoId,
+            detalles: {
+              efectivoEsperado: resumen.efectivoEsperado,
+              efectivoContado: resumen.efectivoContado,
+              diferencia: resumen.diferencia,
+              observaciones: body.notas ?? null,
+            },
+          });
 
           request.log.info(
             {

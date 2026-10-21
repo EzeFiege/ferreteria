@@ -31,7 +31,8 @@ export interface InicioDashboardProps {
       | 'tesoreria'
       | 'facturacion'
       | 'contabilidad'
-      | 'presupuestos',
+      | 'presupuestos'
+      | 'auditoria',
   ) => void;
 }
 
