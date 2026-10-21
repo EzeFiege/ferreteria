@@ -17,6 +17,7 @@ import {
   type TokenVerifier,
 } from '../auth.js';
 import { withTenantTransaction } from '../db/context.js';
+import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
 import {
   chequeCartera,
   movimientoCtaCteProveedor,
@@ -194,7 +195,7 @@ export function registerTesoreriaRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           const [ch] = await db
             .select()
             .from(chequeCartera)
@@ -233,6 +234,29 @@ export function registerTesoreriaRoutes(
             )
             .returning();
 
+          // Asiento contable automático de depósito de cheque
+          await registrarAsientoAutomatico(client, {
+            negocioId: claims.negocioId,
+            concepto: `Depósito cheque #${ch.numero} (${ch.banco}) en cuenta ${body.cuentaBancariaDestino}`,
+            origen: 'deposito_cheque',
+            referenciaId: ch.id,
+            usuarioId: claims.usuarioId,
+            renglones: [
+              {
+                cuentaCodigo: '1.1.02', // Banco y Cuentas Virtuales
+                debe: ch.monto,
+                haber: '0.00',
+                descripcion: `Depósito en cuenta ${body.cuentaBancariaDestino}`,
+              },
+              {
+                cuentaCodigo: '1.1.03', // Valores a Depositar (Cheques)
+                debe: '0.00',
+                haber: ch.monto,
+                descripcion: `Salida de cheque de cartera #${ch.numero}`,
+              },
+            ],
+          });
+
           return { estado: 'ok' as const, cheque: actualizado };
         },
       );
@@ -263,7 +287,7 @@ export function registerTesoreriaRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           const [ch] = await db
             .select()
             .from(chequeCartera)
@@ -329,6 +353,29 @@ export function registerTesoreriaRoutes(
             monto: ch.monto,
             descripcion: `Pago con cheque ${ch.banco} Nº ${ch.numero} (Venc: ${ch.fechaPago})`,
             creadoPor: claims.usuarioId,
+          });
+
+          // Asiento contable automático de endoso de cheque a proveedor
+          await registrarAsientoAutomatico(client, {
+            negocioId: claims.negocioId,
+            concepto: `Endoso cheque #${ch.numero} a ${prov.razonSocial}`,
+            origen: 'pago_proveedor',
+            referenciaId: ch.id,
+            usuarioId: claims.usuarioId,
+            renglones: [
+              {
+                cuentaCodigo: '2.1.01', // Proveedores (Cta Cte)
+                debe: ch.monto,
+                haber: '0.00',
+                descripcion: `Cancelación deuda cta cte con cheque endosado`,
+              },
+              {
+                cuentaCodigo: '1.1.03', // Valores a Depositar (Cheques)
+                debe: '0.00',
+                haber: ch.monto,
+                descripcion: `Entrega cheque cartera #${ch.numero}`,
+              },
+            ],
           });
 
           return { estado: 'ok' as const, cheque: actualizado };

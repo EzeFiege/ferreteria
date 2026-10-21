@@ -20,6 +20,7 @@ import {
   type TokenVerifier,
 } from '../auth.js';
 import { withTenantTransaction } from '../db/context.js';
+import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
 import {
   caja,
   categoria,
@@ -371,7 +372,7 @@ export function registerCajaRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           const insertedVenta = await db
             .insert(venta)
             .values({
@@ -479,6 +480,53 @@ export function registerCajaRoutes(
             }
           }
 
+          if (esNuevaVenta) {
+            // Asiento contable automático de venta
+            const renglonesDebe: Array<{ cuentaCodigo: string; debe: string; haber: string; descripcion?: string }> = [];
+            for (const pago of body.pagos) {
+              const [mp] = await db
+                .select()
+                .from(medioPago)
+                .where(eq(medioPago.id, pago.medioPagoId));
+
+              let codigoCuentaDebe = '1.1.02'; // Banco / Cuentas Virtuales por defecto
+              if (mp) {
+                const nombreLower = mp.nombre.toLowerCase();
+                if (mp.esEfectivo) {
+                  codigoCuentaDebe = '1.1.01'; // Caja Efectivo
+                } else if (nombreLower.includes('cuenta corriente') || nombreLower.includes('cta cte')) {
+                  codigoCuentaDebe = '1.1.04'; // Deudores por Ventas (Cta Cte)
+                } else if (nombreLower.includes('cheque')) {
+                  codigoCuentaDebe = '1.1.03'; // Valores a Depositar (Cheques)
+                }
+              }
+
+              renglonesDebe.push({
+                cuentaCodigo: codigoCuentaDebe,
+                debe: pago.monto,
+                haber: '0.00',
+                descripcion: `Cobro ${mp?.nombre ?? 'Venta'}`,
+              });
+            }
+
+            await registrarAsientoAutomatico(client, {
+              negocioId: claims.negocioId,
+              concepto: `Venta mostrador ${body.id.slice(0, 8)}`,
+              origen: 'venta',
+              referenciaId: body.id,
+              usuarioId: claims.usuarioId,
+              renglones: [
+                ...renglonesDebe,
+                {
+                  cuentaCodigo: '4.1.01', // Ventas de Mercadería
+                  debe: '0.00',
+                  haber: body.total,
+                  descripcion: 'Venta de mercaderías de mostrador',
+                },
+              ],
+            });
+          }
+
           const [ventaActual] = await db
             .select()
             .from(venta)
@@ -528,7 +576,7 @@ export function registerCajaRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           const inserted = await db
             .insert(movimiento)
             .values({
@@ -559,6 +607,76 @@ export function registerCajaRoutes(
               'El identificador de movimiento no está disponible',
               409,
             );
+          }
+
+          if (esNuevo) {
+            if (tipo === 'egreso') {
+              await registrarAsientoAutomatico(client, {
+                negocioId: claims.negocioId,
+                concepto: `Egreso caja ${body.id.slice(0, 8)}${body.descripcion ? ` - ${body.descripcion}` : ''}`,
+                origen: 'egreso_caja',
+                referenciaId: body.id,
+                usuarioId: claims.usuarioId,
+                renglones: [
+                  {
+                    cuentaCodigo: '5.1.02', // Gastos Generales y Operativos
+                    debe: body.monto,
+                    haber: '0.00',
+                    descripcion: body.descripcion ?? 'Gastos generales',
+                  },
+                  {
+                    cuentaCodigo: '1.1.01', // Caja Efectivo
+                    debe: '0.00',
+                    haber: body.monto,
+                    descripcion: 'Salida de caja efectivo',
+                  },
+                ],
+              });
+            } else if (tipo === 'retiro') {
+              await registrarAsientoAutomatico(client, {
+                negocioId: claims.negocioId,
+                concepto: `Retiro de efectivo ${body.id.slice(0, 8)}`,
+                origen: 'egreso_caja',
+                referenciaId: body.id,
+                usuarioId: claims.usuarioId,
+                renglones: [
+                  {
+                    cuentaCodigo: '1.1.02', // Banco y Cuentas Virtuales
+                    debe: body.monto,
+                    haber: '0.00',
+                    descripcion: 'Retiro para depósito bancario / custodia',
+                  },
+                  {
+                    cuentaCodigo: '1.1.01', // Caja Efectivo
+                    debe: '0.00',
+                    haber: body.monto,
+                    descripcion: 'Salida de efectivo por retiro',
+                  },
+                ],
+              });
+            } else {
+              await registrarAsientoAutomatico(client, {
+                negocioId: claims.negocioId,
+                concepto: `Ingreso extra caja ${body.id.slice(0, 8)}${body.descripcion ? ` - ${body.descripcion}` : ''}`,
+                origen: 'manual',
+                referenciaId: body.id,
+                usuarioId: claims.usuarioId,
+                renglones: [
+                  {
+                    cuentaCodigo: '1.1.01', // Caja Efectivo
+                    debe: body.monto,
+                    haber: '0.00',
+                    descripcion: 'Entrada de efectivo',
+                  },
+                  {
+                    cuentaCodigo: '4.1.02', // Otros Ingresos Operativos
+                    debe: '0.00',
+                    haber: body.monto,
+                    descripcion: body.descripcion ?? 'Ingresos extraordinarios / varios',
+                  },
+                ],
+              });
+            }
           }
 
           return {

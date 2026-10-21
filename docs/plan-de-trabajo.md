@@ -300,6 +300,30 @@ Estado:
   - **Presupuestos (`Presupuestos.tsx`)**: Botón para exportar la lista de cotizaciones a Excel.
 - [x] Verificación completa: `pnpm typecheck`, `pnpm lint`, `pnpm test` (66 tests pasando) y `pnpm build` aprobados con cero errores.
 
+---
+
+## Fase 10 — Automatización de Asientos Contables por Eventos del Negocio (Completada ✅)
+
+Objetivo: generación atómica e inmutable de asientos en el libro diario de partida doble (`Σ Debe === Σ Haber`) disparados automáticamente en tiempo real por cada operación comercial, eliminando la carga manual y manteniendo el balance de sumas y saldos permanentemente actualizado.
+
+Estado:
+- [x] Servicio centralizado de contabilidad (`apps/api/src/services/contabilidad-service.ts`):
+  - Helper `registrarAsientoAutomatico(client, params)` con validación de partida doble balanceada en centavos enteros (`Σ Debe === Σ Haber > 0`).
+  - Auto-siembra e inicialización garantizada de cuentas contables estándar de ferretería (`PLAN_CUENTAS_BASE`) en la primera operación del negocio.
+  - Bloqueo transaccional `pg_advisory_xact_lock(hashtext('asiento_contable_' || negocioId))` para numeración correlativa estricta y sin saltos.
+- [x] Eventos de negocio integrados en tiempo real:
+  - **Ventas de mostrador (`apps/api/src/routes/caja.ts`)**: Débito a *Caja Efectivo* (`1.1.01`), *Banco y Cuentas Virtuales* (`1.1.02`), *Deudores por Ventas / Cta Cte* (`1.1.04`) o *Valores a Depositar* (`1.1.03`) y Crédito a *Ventas de Mercadería* (`4.1.01`).
+  - **Egresos y retiros de caja (`apps/api/src/routes/caja.ts`)**: Débito a *Gastos Generales y Operativos* (`5.1.02`) o *Banco* (`1.1.02`) y Crédito a *Caja Efectivo* (`1.1.01`).
+  - **Cobranzas de cuentas corrientes (`apps/api/src/routes/clientes.ts`)**: Débito a *Caja* o *Banco* y Crédito a *Deudores por Ventas (Cta Cte)* (`1.1.04`).
+  - **Recepción de compras y mercaderías (`apps/api/src/routes/compras.ts`)**: Débito a *Mercaderías en Stock* (`1.1.05`) y Crédito a *Proveedores (Cta Cte)* (`2.1.01`).
+  - **Pagos a proveedores (`apps/api/src/routes/compras.ts`)**: Débito a *Proveedores (Cta Cte)* (`2.1.01`) y Crédito a *Caja* o *Banco*.
+  - **Depósito y endoso de cheques (`apps/api/src/routes/tesoreria.ts`)**: Débito a *Bancos* o *Proveedores* y Crédito a *Valores a Depositar (Cheques)* (`1.1.03`).
+- [x] Pruebas automáticas y calidad:
+  - Nuevo test automatizado en `apps/api/src/routes/contabilidad.test.ts` (test 8) que comprueba la creación automática de asientos al vender y egresar de caja, y su impacto directo en el Balance de Sumas y Saldos.
+  - Suite de pruebas de Vitest pasando al 100% (13 archivos de prueba, 67 tests pasando en PostgreSQL real con Testcontainers).
+  - `pnpm typecheck`, `pnpm lint` y `pnpm build` aprobados con cero errores.
+
+
 
 
 

@@ -13,9 +13,11 @@ import {
   cliente,
   clienteAutorizado,
   movimiento,
+  medioPago,
   movimientoCtaCte,
   turnoCaja,
 } from '../db/schema.js';
+import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
 import {
   assertRoles,
   authenticateRequest,
@@ -511,6 +513,36 @@ export function registerClientesRoutes(
               creadoPor: claims.usuarioId,
             })
             .returning();
+
+          // Generar asiento contable automático de cobranza
+          const [mpCobro] = await db
+            .select()
+            .from(medioPago)
+            .where(eq(medioPago.id, body.medioPagoId));
+
+          const cuentaDebe = mpCobro?.esEfectivo ? '1.1.01' : '1.1.02';
+
+          await registrarAsientoAutomatico(client, {
+            negocioId: claims.negocioId,
+            concepto: `Cobranza cta cte ${c.codigo} · ${c.nombre}`,
+            origen: 'cobro_cta_cte',
+            referenciaId: movCtaCte?.id ?? body.id,
+            usuarioId: claims.usuarioId,
+            renglones: [
+              {
+                cuentaCodigo: cuentaDebe,
+                debe: body.monto,
+                haber: '0.00',
+                descripcion: `Ingreso por cobranza cta cte (${mpCobro?.nombre ?? 'Cobro'})`,
+              },
+              {
+                cuentaCodigo: '1.1.04', // Deudores por Ventas (Cta Cte)
+                debe: '0.00',
+                haber: body.monto,
+                descripcion: `Cancelación crédito cliente ${c.nombre}`,
+              },
+            ],
+          });
 
           // 3. Obtener nuevo saldo consolidado
           const saldoRes = await client.query<SaldoClienteRow>(

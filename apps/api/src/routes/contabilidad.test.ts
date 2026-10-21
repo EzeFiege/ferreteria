@@ -55,6 +55,7 @@ describe('Fase 7 — Contabilidad (Plan de cuentas, Libro Diario, Sumas y Saldos
       negocioId,
       nombre,
     ]);
+    await adminPool.query('select sembrar_negocio($1)', [negocioId]);
     await adminPool.query(
       'insert into sucursal (id, negocio_id, nombre) values ($1, $2, $3)',
       [sucursalId, negocioId, 'Sucursal Central'],
@@ -326,5 +327,108 @@ describe('Fase 7 — Contabilidad (Plan de cuentas, Libro Diario, Sumas y Saldos
       expect(item.totalDebe).toBe('0.00');
       expect(item.totalHaber).toBe('0.00');
     }
+  });
+
+  it('8. Automatización de asientos contables por eventos de venta y egreso', async () => {
+    // 1. Abrir un turno de caja
+    const turnoRes = await app.inject({
+      method: 'POST',
+      url: '/turnos/abrir',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+      payload: {
+        id: randomUUID(),
+        cajaId: negocioA.cajaId,
+        efectivoInicial: '1000.00',
+      },
+    });
+    expect(turnoRes.statusCode).toBe(201);
+    const turno = turnoRes.json<{ turno: { id: string } }>();
+
+    // Obtener medio de pago efectivo y categoría de egreso de negocioA
+    const mediosRes = await adminPool.query<{ id: string }>(
+      "select id from medio_pago where negocio_id = $1 and es_efectivo = true limit 1",
+      [negocioA.negocioId]
+    );
+    const medioEfectivoId = mediosRes.rows[0]?.id;
+    expect(medioEfectivoId).toBeDefined();
+
+    const catRes = await adminPool.query<{ id: string }>(
+      "select id from categoria where negocio_id = $1 and tipo = 'egreso' limit 1",
+      [negocioA.negocioId]
+    );
+    const categoriaId = catRes.rows[0]?.id;
+
+    // 2. Registrar una venta de mostrador
+    const ventaId = randomUUID();
+    const resVenta = await app.inject({
+      method: 'POST',
+      url: '/ventas',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+      payload: {
+        id: ventaId,
+        turnoId: turno.turno.id,
+        total: '2500.00',
+        pagos: [
+          {
+            movimientoId: randomUUID(),
+            medioPagoId: medioEfectivoId!,
+            monto: '2500.00',
+            descripcion: 'Venta de prueba para asiento contable',
+          },
+        ],
+      },
+    });
+    expect(resVenta.statusCode).toBe(201);
+
+    // 3. Registrar un egreso de caja
+    const resEgreso = await app.inject({
+      method: 'POST',
+      url: '/movimientos/egreso',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+      payload: {
+        id: randomUUID(),
+        turnoId: turno.turno.id,
+        monto: '500.00',
+        medioPagoId: medioEfectivoId!,
+        categoriaId,
+        descripcion: 'Compra de artículos de limpieza',
+      },
+    });
+    expect(resEgreso.statusCode).toBe(201);
+
+    // 4. Consultar libro diario y verificar asientos automáticos
+    const resLibro = await app.inject({
+      method: 'GET',
+      url: '/contabilidad/libro-diario',
+      headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+    });
+    expect(resLibro.statusCode).toBe(200);
+    const libro = resLibro.json<AsientoContableDetalle[]>();
+
+    const asientoVenta = libro.find((a) => a.origen === 'venta' && a.referenciaId === ventaId);
+    expect(asientoVenta).toBeDefined();
+    expect(asientoVenta?.cuadrado).toBe(true);
+    expect(asientoVenta?.totalDebe).toBe('2500.00');
+    expect(asientoVenta?.totalHaber).toBe('2500.00');
+
+    const asientoEgreso = libro.find((a) => a.origen === 'egreso_caja');
+    expect(asientoEgreso).toBeDefined();
+    expect(asientoEgreso?.cuadrado).toBe(true);
+    expect(asientoEgreso?.totalDebe).toBe('500.00');
+    expect(asientoEgreso?.totalHaber).toBe('500.00');
+
+    // 5. Verificar balance de sumas y saldos
+    const resSumas = await app.inject({
+      method: 'GET',
+      url: '/contabilidad/sumas-y-saldos',
+      headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+    });
+    expect(resSumas.statusCode).toBe(200);
+    const sumas = resSumas.json<ItemSumasYSaldos[]>();
+
+    const cuentaCaja = sumas.find((s) => s.cuentaCodigo === '1.1.01');
+    expect(cuentaCaja).toBeDefined();
+    expect(parseFloat(cuentaCaja?.totalDebe ?? '0')).toBeGreaterThanOrEqual(2500);
+    expect(parseFloat(cuentaCaja?.totalHaber ?? '0')).toBeGreaterThanOrEqual(500);
   });
 });

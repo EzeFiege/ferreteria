@@ -10,9 +10,11 @@ import {
   registrarPagoProveedorSchema,
 } from '@ferreteria/shared';
 import { withTenantTransaction } from '../db/context.js';
+import { registrarAsientoAutomatico } from '../services/contabilidad-service.js';
 import {
   categoria,
   itemOrdenCompra,
+  medioPago,
   movimiento,
   movimientoCtaCteProveedor,
   movimientoStock,
@@ -384,7 +386,7 @@ export function registerComprasRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           // 1. Validar turno abierto
           const [turno] = await db
             .select()
@@ -478,6 +480,44 @@ export function registerComprasRoutes(
           if (!movCtaCte) {
             throw new AuthError('Error al registrar pago en cuenta corriente', 500);
           }
+
+          // Asiento contable automático de pago a proveedor
+          const [mpPago] = await db
+            .select()
+            .from(medioPago)
+            .where(eq(medioPago.id, body.medioPagoId));
+
+          let cuentaHaber = '1.1.02'; // Banco / Cuentas Virtuales por defecto
+          if (mpPago) {
+            const nom = mpPago.nombre.toLowerCase();
+            if (mpPago.esEfectivo) {
+              cuentaHaber = '1.1.01'; // Caja Efectivo
+            } else if (nom.includes('cheque')) {
+              cuentaHaber = '1.1.03'; // Valores a Depositar (Cheques)
+            }
+          }
+
+          await registrarAsientoAutomatico(client, {
+            negocioId: claims.negocioId,
+            concepto: `Pago a proveedor ${p.razonSocial}`,
+            origen: 'pago_proveedor',
+            referenciaId: movCtaCte.id,
+            usuarioId: claims.usuarioId,
+            renglones: [
+              {
+                cuentaCodigo: '2.1.01', // Proveedores (Cta Cte)
+                debe: body.monto,
+                haber: '0.00',
+                descripcion: `Cancelación deuda cta cte proveedor ${p.razonSocial}`,
+              },
+              {
+                cuentaCodigo: cuentaHaber,
+                debe: '0.00',
+                haber: body.monto,
+                descripcion: `Salida de fondos (${mpPago?.nombre ?? 'Pago'})`,
+              },
+            ],
+          });
 
           return {
             pagoId: movCtaCte.id,
@@ -672,7 +712,7 @@ export function registerComprasRoutes(
       const resultado = await withTenantTransaction(
         pool,
         claims.negocioId,
-        async ({ db }) => {
+        async ({ db, client }) => {
           // 1. Obtener la orden de compra
           const [oc] = await db
             .select()
@@ -762,6 +802,29 @@ export function registerComprasRoutes(
               creadoPor: claims.usuarioId,
             });
           }
+
+          // Generar asiento contable automático de recepción de stock
+          await registrarAsientoAutomatico(client, {
+            negocioId: claims.negocioId,
+            concepto: `Recepción Orden de Compra #${oc.numero}`,
+            origen: 'compra_stock',
+            referenciaId: oc.id,
+            usuarioId: claims.usuarioId,
+            renglones: [
+              {
+                cuentaCodigo: '1.1.05', // Mercaderías en Stock
+                debe: oc.total,
+                haber: '0.00',
+                descripcion: `Ingreso de mercadería por OC #${oc.numero}`,
+              },
+              {
+                cuentaCodigo: '2.1.01', // Proveedores (Cta Cte)
+                debe: '0.00',
+                haber: oc.total,
+                descripcion: `Deuda cta cte OC #${oc.numero}`,
+              },
+            ],
+          });
 
           // 4. Marcar orden como recibida
           const [recibida] = await db
