@@ -24,6 +24,7 @@ import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 import { FacturacionFiscal } from './FacturacionFiscal.js';
 import { Contabilidad } from './Contabilidad.js';
 import { Presupuestos } from './Presupuestos.js';
+import { InicioDashboard } from './InicioDashboard.js';
 import {
   imprimirTicketTermico,
   type DatosTicketTermico,
@@ -247,6 +248,7 @@ export function App(): ReactElement {
     useState<ResumenTurnoEstado | null>(null);
 
   const [pestana, setPestana] = useState<
+    | 'inicio'
     | 'venta'
     | 'egreso'
     | 'arqueo'
@@ -259,7 +261,8 @@ export function App(): ReactElement {
     | 'facturacion'
     | 'contabilidad'
     | 'presupuestos'
-  >('venta');
+  >('inicio');
+  const [sidebarAbierto, setSidebarAbierto] = useState<boolean>(false);
 
   // Cliente para venta rápida en mostrador
   const [clienteSeleccionadoVenta, setClienteSeleccionadoVenta] =
@@ -1240,30 +1243,363 @@ export function App(): ReactElement {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 pb-10">
-      <header className="bg-slate-900 text-white px-4 py-3 shadow">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs text-slate-400">
-              {contexto.negocioNombre} · {contexto.caja.nombre}
+    <div className="flex h-screen overflow-hidden bg-slate-100">
+      {/* Backdrop móvil */}
+      {sidebarAbierto && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden"
+          onClick={() => { setSidebarAbierto(false); }}
+        />
+      )}
+
+      {/* SIDEBAR LATERAL PROFESIONAL Y AGRUPADO */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-950 text-slate-300 shadow-xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          sidebarAbierto ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Identidad del Negocio */}
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 px-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-amber-600 text-xl font-black text-slate-950 shadow-md">
+              🛠️
             </div>
-            <div className="text-base font-bold">
-              {turnoId ? (
-                <>
-                  Turno abierto · Cajón esperado:{' '}
-                  <span
-                    data-testid="header-efectivo-esperado"
-                    className="text-emerald-400"
-                  >
-                    {formatearPesos(efectivoEsperadoTotal)}
-                  </span>
-                </>
-              ) : (
-                <span className="text-amber-300 font-bold">
-                  Turno cerrado · Cajón sugerido:{' '}
-                  {formatearPesos(efectivoSugerido)}
-                </span>
-              )}
+            <div className="truncate">
+              <div className="truncate text-sm font-black text-white leading-tight">
+                {contexto.negocioNombre}
+              </div>
+              <div className="truncate text-[11px] font-semibold text-emerald-400">
+                {contexto.caja.nombre}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSidebarAbierto(false); }}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Menú de Navegación Organizado por Áreas */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 text-xs">
+          {/* ÁREA GENERAL */}
+          <div>
+            <div className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              General
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                data-testid="tab-inicio"
+                onClick={() => {
+                  setPestana('inicio');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'inicio'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🏠</span>
+                <span>Inicio / Tablero</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ÁREA MOSTRADOR & CAJA */}
+          <div>
+            <div className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Mostrador & Caja
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                data-testid="tab-venta"
+                onClick={() => {
+                  setPestana('venta');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'venta'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🛒</span>
+                <span>Venta en Mostrador</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-presupuestos"
+                onClick={() => {
+                  setPestana('presupuestos');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'presupuestos'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">📝</span>
+                <span>Presupuestos y Cotiz.</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-egreso"
+                onClick={() => {
+                  setPestana('egreso');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'egreso'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">💸</span>
+                <span>Egresos y Gastos</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-arqueo"
+                onClick={() => {
+                  setPestana('arqueo');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'arqueo'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🔒</span>
+                <span>Cierre con Arqueo</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ÁREA STOCK & CLIENTES */}
+          <div>
+            <div className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Stock & Clientes
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                data-testid="tab-catalogo"
+                onClick={() => {
+                  setPestana('catalogo');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'catalogo'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">📦</span>
+                <span>Artículos y Stock</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-clientes"
+                onClick={() => {
+                  setPestana('clientes');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'clientes'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">👥</span>
+                <span>Clientes y Cta. Cte.</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-compras"
+                onClick={() => {
+                  setPestana('compras');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'compras'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🚚</span>
+                <span>Compras y Proveedores</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ÁREA FINANZAS & CONTABILIDAD */}
+          <div>
+            <div className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Finanzas & Fiscal
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                data-testid="tab-tesoreria"
+                onClick={() => {
+                  setPestana('tesoreria');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'tesoreria'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🏦</span>
+                <span>Tesorería y Cheques</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-facturacion"
+                onClick={() => {
+                  setPestana('facturacion');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'facturacion'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🧾</span>
+                <span>Facturación ARCA / AFIP</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-contabilidad"
+                onClick={() => {
+                  setPestana('contabilidad');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'contabilidad'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">⚖️</span>
+                <span>Contabilidad y Diario</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ÁREA CONTROL & CONFIGURACIÓN */}
+          <div>
+            <div className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Control & Sistema
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                data-testid="tab-reportes"
+                onClick={() => {
+                  setPestana('reportes');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'reportes'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">📊</span>
+                <span>Reportes e Historial</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-configuracion"
+                onClick={() => {
+                  setPestana('configuracion');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'configuracion'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">⚙️</span>
+                <span>Configuración</span>
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        {/* Pie del Sidebar: Operador */}
+        <div className="border-t border-slate-800 bg-slate-900/80 p-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-xs font-black text-white">
+              {operadorActivo.nombre.charAt(0)}
+            </div>
+            <div className="truncate">
+              <div className="truncate text-xs font-bold text-white">{operadorActivo.nombre}</div>
+              <div className="text-[10px] capitalize text-slate-400">Rol: {operadorActivo.rol}</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ÁREA PRINCIPAL */}
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        {/* HEADER SUPERIOR */}
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4 text-white shadow-sm">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => { setSidebarAbierto(true); }}
+              className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 hover:text-white lg:hidden"
+              aria-label="Abrir menú"
+            >
+              <span className="text-xl leading-none">☰</span>
+            </button>
+
+            <div>
+              <div className="text-xs text-slate-400 font-medium">
+                {contexto.negocioNombre} · {contexto.caja.nombre}
+              </div>
+              <div className="text-sm font-bold flex items-center gap-2">
+                {turnoId ? (
+                  <>
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Cajón esperado:</span>
+                    <span
+                      data-testid="header-efectivo-esperado"
+                      className="text-emerald-400 font-black"
+                    >
+                      {formatearPesos(efectivoEsperadoTotal)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                    <span className="text-amber-300">Caja cerrada</span>
+                    <span className="text-xs text-slate-400">
+                      (Sugerido: {formatearPesos(efectivoSugerido)})
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1295,21 +1631,21 @@ export function App(): ReactElement {
               onClick={() => {
                 setModoSinConexion((prev) => !prev);
               }}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
                 modoSinConexion
                   ? 'bg-rose-600 text-white'
                   : 'bg-emerald-600 text-white'
               }`}
             >
-              {modoSinConexion ? 'SIN CONEXIÓN (Offline)' : 'EN LÍNEA (Online)'}
+              {modoSinConexion ? 'OFFLINE' : 'ONLINE'}
             </button>
 
             <div
               data-testid="badge-cola-offline"
-              className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold border border-slate-700"
+              className="flex items-center gap-2 rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-semibold border border-slate-700"
             >
               <span>
-                Cola local:{' '}
+                Cola:{' '}
                 <strong data-testid="contador-cola-offline">
                   {colaPendiente.length}
                 </strong>
@@ -1319,281 +1655,133 @@ export function App(): ReactElement {
                   type="button"
                   data-testid="btn-sincronizar-cola"
                   disabled={sincronizando}
-                  onClick={() => void ejecutarSincronizacion()}
+                  onClick={() => { void ejecutarSincronizacion(); }}
                   className="rounded bg-amber-500 px-2 py-0.5 text-xs font-bold text-slate-950"
                 >
-                  {sincronizando ? 'Sincronizando...' : 'Sincronizar'}
+                  {sincronizando ? '...' : 'Sync'}
                 </button>
               )}
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div className="mx-auto max-w-5xl px-4 pt-4">
-        {aviso && (
-          <div
-            data-testid="banner-aviso"
-            className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-950"
-          >
-            {aviso}
-          </div>
-        )}
-
-        {ultimaVentaParaTicket && (
-          <div
-            data-testid="banner-ticket-termico"
-            className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950 flex flex-wrap items-center justify-between gap-3 shadow-sm"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🖨</span>
-              <span>
-                Comprobante listo ({formatearPesos(ultimaVentaParaTicket.total)} - {ultimaVentaParaTicket.medioCobro}):
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 80 });
-                }}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+        {/* CONTENIDO PRINCIPAL */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 lg:pb-8">
+          <div className="mx-auto max-w-5xl">
+            {aviso && (
+              <div
+                data-testid="banner-aviso"
+                className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-950"
               >
-                Imprimir 80mm
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 58 });
-                }}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
-              >
-                Imprimir 58mm
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUltimaVentaParaTicket(null);
-                }}
-                className="rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-300"
-              >
-                ✕ Cerrar
-              </button>
-            </div>
-          </div>
-        )}
+                {aviso}
+              </div>
+            )}
 
-        <section className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
-            <div className="text-xs text-slate-500">Efectivo inicial</div>
-            <div
-              data-testid="card-efectivo-inicial"
-              className="mt-1 text-lg font-bold text-slate-900"
-            >
-              {formatearPesos(resumen?.efectivoInicial ?? efectivoInicialInput)}
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
-            <div className="text-xs text-slate-500">Entradas en efectivo</div>
-            <div
-              data-testid="card-entradas-efectivo"
-              className="mt-1 text-lg font-bold text-emerald-700"
-            >
-              {formatearPesos(entradasTotalesEfectivo)}
-            </div>
-          </div>
-          <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
-            <div className="text-xs text-slate-500">Salidas / Egresos</div>
-            <div
-              data-testid="card-salidas-efectivo"
-              className="mt-1 text-lg font-bold text-rose-700"
-            >
-              {formatearPesos(salidasTotalesEfectivo)}
-            </div>
-          </div>
-          <div className="rounded-xl bg-emerald-900 p-3.5 text-white shadow-sm">
-            <div className="text-xs text-emerald-200">
-              Efectivo esperado en cajón
-            </div>
-            <div
-              data-testid="card-efectivo-esperado"
-              className="mt-1 text-xl font-black"
-            >
-              {formatearPesos(efectivoEsperadoTotal)}
-            </div>
-          </div>
-        </section>
+            {ultimaVentaParaTicket && (
+              <div
+                data-testid="banner-ticket-termico"
+                className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950 flex flex-wrap items-center justify-between gap-3 shadow-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🖨</span>
+                  <span>
+                    Comprobante listo ({formatearPesos(ultimaVentaParaTicket.total)} - {ultimaVentaParaTicket.medioCobro}):
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 80 });
+                    }}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+                  >
+                    Imprimir 80mm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 58 });
+                    }}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+                  >
+                    Imprimir 58mm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUltimaVentaParaTicket(null);
+                    }}
+                    className="rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-300"
+                  >
+                    ✕ Cerrar
+                  </button>
+                </div>
+              </div>
+            )}
 
-        <nav className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-200 p-1 md:grid-cols-7">
-          <button
-            type="button"
-            data-testid="tab-venta"
-            onClick={() => {
-              setPestana('venta');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'venta'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            1. Venta Rápida
-          </button>
-          <button
-            type="button"
-            data-testid="tab-egreso"
-            onClick={() => {
-              setPestana('egreso');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'egreso'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            2. Egresos / Gastos
-          </button>
-          <button
-            type="button"
-            data-testid="tab-arqueo"
-            onClick={() => {
-              setPestana('arqueo');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'arqueo'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            3. Cerrar con Arqueo
-          </button>
-          <button
-            type="button"
-            data-testid="tab-reportes"
-            onClick={() => {
-              setPestana('reportes');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'reportes'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            4. Reportes e Historial
-          </button>
-          <button
-            type="button"
-            data-testid="tab-configuracion"
-            onClick={() => {
-              setPestana('configuracion');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'configuracion'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            5. Config. y Piloto
-          </button>
-          <button
-            type="button"
-            data-testid="tab-catalogo"
-            onClick={() => {
-              setPestana('catalogo');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'catalogo'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            6. Catálogo y Stock
-          </button>
-          <button
-            type="button"
-            data-testid="tab-clientes"
-            onClick={() => {
-              setPestana('clientes');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'clientes'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            7. Clientes y Cta. Cte.
-          </button>
-          <button
-            type="button"
-            data-testid="tab-compras"
-            onClick={() => {
-              setPestana('compras');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'compras'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            8. Compras y Proveedores
-          </button>
-          <button
-            type="button"
-            data-testid="tab-tesoreria"
-            onClick={() => {
-              setPestana('tesoreria');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'tesoreria'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            9. Tesorería y Flujo
-          </button>
-          <button
-            type="button"
-            data-testid="tab-facturacion"
-            onClick={() => {
-              setPestana('facturacion');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'facturacion'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            10. Facturación ARCA
-          </button>
-          <button
-            type="button"
-            data-testid="tab-presupuestos"
-            onClick={() => {
-              setPestana('presupuestos');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'presupuestos'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            12. Presupuestos
-          </button>
-          <button
-            type="button"
-            data-testid="tab-contabilidad"
-            onClick={() => {
-              setPestana('contabilidad');
-            }}
-            className={`rounded-lg py-2.5 text-sm font-bold transition ${
-              pestana === 'contabilidad'
-                ? 'bg-white text-slate-900 shadow'
-                : 'text-slate-700'
-            }`}
-          >
-            11. Contabilidad
-          </button>
-        </nav>
+            {/* TABLERO DE INICIO */}
+            {pestana === 'inicio' && (
+              <InicioDashboard
+                turnoId={turnoId}
+                operadorActivo={operadorActivo}
+                nombreCaja={contexto.caja.nombre}
+                efectivoEsperado={efectivoEsperadoTotal}
+                efectivoInicial={resumen?.efectivoInicial ?? efectivoInicialInput}
+                entradasEfectivo={entradasTotalesEfectivo}
+                salidasEfectivo={salidasTotalesEfectivo}
+                ventasPorMedio={ventasPorMedio}
+                ultimoArqueoCerrado={ultimoArqueoCerrado}
+                colaPendienteCount={colaPendiente.length}
+                modoSinConexion={modoSinConexion}
+                onNavegar={setPestana}
+              />
+            )}
+
+            {/* Tarjetas de Caja / Mostrador (en venta, egreso, arqueo) */}
+            {(pestana === 'venta' || pestana === 'egreso' || pestana === 'arqueo') && (
+              <section className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
+                  <div className="text-xs text-slate-500">Efectivo inicial</div>
+                  <div
+                    data-testid="card-efectivo-inicial"
+                    className="mt-1 text-lg font-bold text-slate-900"
+                  >
+                    {formatearPesos(resumen?.efectivoInicial ?? efectivoInicialInput)}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
+                  <div className="text-xs text-slate-500">Entradas en efectivo</div>
+                  <div
+                    data-testid="card-entradas-efectivo"
+                    className="mt-1 text-lg font-bold text-emerald-700"
+                  >
+                    {formatearPesos(entradasTotalesEfectivo)}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-white p-3.5 shadow-sm border border-slate-200">
+                  <div className="text-xs text-slate-500">Salidas / Egresos</div>
+                  <div
+                    data-testid="card-salidas-efectivo"
+                    className="mt-1 text-lg font-bold text-rose-700"
+                  >
+                    {formatearPesos(salidasTotalesEfectivo)}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-emerald-900 p-3.5 text-white shadow-sm">
+                  <div className="text-xs text-emerald-200">
+                    Efectivo esperado en cajón
+                  </div>
+                  <div
+                    data-testid="card-efectivo-esperado"
+                    className="mt-1 text-xl font-black"
+                  >
+                    {formatearPesos(efectivoEsperadoTotal)}
+                  </div>
+                </div>
+              </section>
+            )}
+
 
                 {pestana === 'presupuestos' && (
           <Presupuestos
@@ -2704,6 +2892,52 @@ export function App(): ReactElement {
           </div>
         )}
       </div>
-    </main>
+        </main>
+
+        {/* BOTTOM NAV PARA MÓVILES */}
+        <nav className="fixed bottom-0 inset-x-0 z-30 flex h-14 border-t border-slate-200 bg-white shadow-lg lg:hidden items-center justify-around text-[10px] font-bold text-slate-600">
+          <button
+            type="button"
+            onClick={() => { setPestana('inicio'); }}
+            className={`flex flex-col items-center gap-0.5 py-1 ${pestana === 'inicio' ? 'text-emerald-600' : ''}`}
+          >
+            <span className="text-base">🏠</span>
+            <span>Inicio</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPestana('venta'); }}
+            className={`flex flex-col items-center gap-0.5 py-1 ${pestana === 'venta' ? 'text-emerald-600' : ''}`}
+          >
+            <span className="text-base">🛒</span>
+            <span>Vender</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPestana('presupuestos'); }}
+            className={`flex flex-col items-center gap-0.5 py-1 ${pestana === 'presupuestos' ? 'text-emerald-600' : ''}`}
+          >
+            <span className="text-base">📝</span>
+            <span>Cotizar</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPestana('catalogo'); }}
+            className={`flex flex-col items-center gap-0.5 py-1 ${pestana === 'catalogo' ? 'text-emerald-600' : ''}`}
+          >
+            <span className="text-base">📦</span>
+            <span>Stock</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSidebarAbierto(true); }}
+            className="flex flex-col items-center gap-0.5 py-1 text-slate-700"
+          >
+            <span className="text-base">☰</span>
+            <span>Menú</span>
+          </button>
+        </nav>
+      </div>
+    </div>
   );
 }

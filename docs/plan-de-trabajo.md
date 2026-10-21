@@ -323,6 +323,30 @@ Estado:
   - Suite de pruebas de Vitest pasando al 100% (13 archivos de prueba, 67 tests pasando en PostgreSQL real con Testcontainers).
   - `pnpm typecheck`, `pnpm lint` y `pnpm build` aprobados con cero errores.
 
+---
+
+## Mejora UX/UI — Tablero de Inicio Principal y Menús Agrupados por Áreas (Completada ✅)
+
+Objetivo: optimizar la experiencia de usuario en mostrador y administración reemplazando la cuadrícula plana y desordenada de 12 pestañas por un Sidebar profesional organizado por áreas funcionales, un Header superior limpio con badge de turno y una nueva Pantalla de Inicio / Tablero de Control con métricas en vivo y accesos directos táctiles.
+
+Estado:
+- [x] Pantalla de Inicio / Dashboard Principal (`apps/web/src/InicioDashboard.tsx`):
+  - Banner de bienvenida con estado de caja en tiempo real (abierta/cerrada), fecha y rol activo.
+  - Tarjetas de KPIs en vivo: Efectivo inicial, Ventas acumuladas del turno, Egresos registrados y Efectivo esperado en cajón.
+  - Accesos rápidos táctiles en un toque a las operaciones cotidianas: Venta en Mostrador, Presupuestos, Artículos y Stock, Egresos, Clientes y Cta. Cte., Proveedores, Facturación Fiscal y Cierre con Arqueo.
+  - Paneles de control: ventas del turno desglosadas por medio de cobro, estado de conectividad, contador de cola offline y resultado del último arqueo cerrado.
+- [x] Reestructuración del Menú de Navegación (`apps/web/src/App.tsx`):
+  - **Sidebar Lateral Categorizado**:
+    - **General**: Inicio / Tablero (`tab-inicio`).
+    - **Mostrador & Caja**: Venta en Mostrador (`tab-venta`), Presupuestos (`tab-presupuestos`), Egresos (`tab-egreso`), Arqueo (`tab-arqueo`).
+    - **Stock & Clientes**: Artículos y Stock (`tab-catalogo`), Clientes & Cta. Cte. (`tab-clientes`), Compras & Proveedores (`tab-compras`).
+    - **Finanzas & Fiscal**: Tesorería (`tab-tesoreria`), Facturación ARCA (`tab-facturacion`), Contabilidad (`tab-contabilidad`).
+    - **Control & Sistema**: Reportes (`tab-reportes`), Configuración (`tab-configuracion`).
+  - **Header Superior Limpio**: Selector de operador, botón toggle de conexión online/offline con indicador de cola y badge vivo de efectivo esperado en cajón.
+  - **Barra de Navegación Inferior (Bottom Nav)**: Para celulares y tabletas PWA con accesos rápidos a Inicio, Vender, Cotizar, Stock y Menú lateral.
+- [x] Compatibilidad total con tests existentes: todos los `data-testid` se mantuvieron intactos.
+
+
 
 
 
