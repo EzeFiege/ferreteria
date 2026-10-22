@@ -16,6 +16,7 @@ import { registerFacturacionRoutes } from './routes/facturacion.js';
 import { registerContabilidadRoutes } from './routes/contabilidad.js';
 import { registerPresupuestosRoutes } from './routes/presupuestos.js';
 import { registerAuditoriaRoutes } from './routes/auditoria.js';
+import { registerAuthRoutes } from './routes/auth.js';
 
 const { Pool } = pg;
 
@@ -148,6 +149,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   });
 
   registerAuditoriaRoutes(app, {
+    pool,
+    verifyToken: options.verifyToken,
+  });
+
+  registerAuthRoutes(app, {
     pool,
     verifyToken: options.verifyToken,
   });

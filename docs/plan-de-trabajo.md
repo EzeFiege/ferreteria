@@ -408,6 +408,33 @@ Estado:
   - Suite completa de 74 tests pasando en PostgreSQL real con Testcontainers (`pnpm test`).
   - `pnpm build` de Vite completado exitosamente.
 
+---
+
+## Fase 13 — Autenticación Directa, Sesión y Pantalla de Login (Completada ✅)
+
+Objetivo: dotar al sistema de una pantalla formal de inicio de sesión con usuario/email y contraseña criptográfica, protegiendo las operaciones comerciales de acuerdo a los roles de acceso (`cajero`, `encargado`, `dueno`), persistencia de sesión local y botón de salida/cierre de sesión seguro.
+
+Estado:
+- [x] Migración SQL `012_usuarios_autenticacion.sql`:
+  - Nuevas columnas en tabla `usuario`: `email text`, `password_hash text`, `ultimo_ingreso timestamptz`.
+  - Índices sobre `lower(email)` y `lower(nombre)`.
+  - Función de base de datos `autenticar_usuario(p_identificador, p_negocio_id)` con `security definer` para verificación previa a la apertura de transacción con RLS.
+  - Actualización de usuarios de demostración iniciales con credenciales seguras salteadas (`demo-cajero`, `demo-encargado`, `demo-dueno`).
+- [x] Esquemas compartidos en `packages/shared`:
+  - `loginInputSchema`, `UsuarioSesion`, `LoginResponse`.
+- [x] Backend API (`apps/api`):
+  - Utilidad criptográfica `apps/api/src/services/password.ts` con sal aleatoria de 16 bytes y scrypt (`timingSafeEqual` contra timing attacks).
+  - Rutas de autenticación en `apps/api/src/routes/auth.ts`: `POST /auth/login` (emisión de JWT con claims de tenant), `GET /auth/me` (perfil activo) y `POST /auth/logout`.
+  - Suite de 6 tests de integración en `apps/api/src/routes/auth.test.ts` pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Componente de pantalla `apps/web/src/Login.tsx`: interfaz responsiva con branding de ferretería, inputs validados, toggle de visibilidad de contraseña y chips de acceso rápido de 1 clic para desarrollo/piloto.
+  - Integración en `apps/web/src/App.tsx`: bloqueo de acceso si no hay sesión, persistencia en `localStorage`, indicador de usuario y rol autenticado en el header y botón de salida **"Salir 🚪"** (`btn-cerrar-sesion`).
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores.
+  - `pnpm lint` superado con cero errores.
+  - Suite completa de **80 tests pasando al 100%** (`pnpm test`).
+  - Compilación de producción con Vite (`pnpm build`) exitosa.
+
 
 
 

@@ -895,3 +895,28 @@ export interface EjercicioContableItem {
   creadoEn: string;
 }
 
+// -------------------------------------------------------------
+// Fase 13: Autenticación, Sesión y Usuarios
+// -------------------------------------------------------------
+
+export const loginInputSchema = z.object({
+  usuario: z.string().min(1, 'Ingresá tu usuario o email').max(100),
+  password: z.string().min(1, 'Ingresá tu contraseña').max(100),
+  negocioId: uuidSchema.optional(),
+});
+export type LoginInput = z.infer<typeof loginInputSchema>;
+
+export interface UsuarioSesion {
+  id: string;
+  negocioId: string;
+  negocioNombre?: string;
+  nombre: string;
+  email?: string | null;
+  rol: RolUsuario;
+}
+
+export interface LoginResponse {
+  token: string;
+  usuario: UsuarioSesion;
+}
+

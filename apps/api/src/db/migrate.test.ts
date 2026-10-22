@@ -56,6 +56,7 @@ describe('API & Migraciones de base de datos', () => {
       '009_presupuestos.sql',
       '010_auditoria_cierre_ejercicio.sql',
       '011_items_factura_y_venta.sql',
+      '012_usuarios_autenticacion.sql',
     ]);
 
     const sql002 = await readFile(
@@ -90,6 +91,7 @@ describe('API & Migraciones de base de datos', () => {
       '009_presupuestos.sql',
       '010_auditoria_cierre_ejercicio.sql',
       '011_items_factura_y_venta.sql',
+      '012_usuarios_autenticacion.sql',
     ]);
 
     // Ejecutar por segunda vez debe ser idempotente (0 nuevas migraciones)

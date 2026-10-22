@@ -31,6 +31,8 @@ import {
   type DatosTicketTermico,
 } from './utils/impresion-ticket.js';
 import { exportarACSV } from './utils/exportar-csv.js';
+import { Login } from './Login.js';
+import type { UsuarioSesion } from '@ferreteria/shared';
 import { imprimirComprobanteFiscal } from './utils/impresion-factura.js';
 import type { ComprobanteFiscalDetalle } from '@ferreteria/shared';
 
@@ -237,9 +239,41 @@ function generarUuid(): string {
 
 export function App(): ReactElement {
   const [contexto, setContexto] = useState<ContextoMostrador>(CONTEXTO_FALLBACK);
-  const [operadorActivo, setOperadorActivo] = useState<OperadorItem | null>(
-    null,
-  );
+  const [operadorActivo, setOperadorActivo] = useState<OperadorItem | null>(() => {
+    try {
+      const guardado = localStorage.getItem('ferreteria_sesion');
+      return guardado ? (JSON.parse(guardado) as OperadorItem) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleLoginExitoso = useCallback((token: string, usuario: UsuarioSesion): void => {
+    const item: OperadorItem = {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      rol: usuario.rol,
+      token,
+    };
+    setOperadorActivo(item);
+    try {
+      localStorage.setItem('ferreteria_sesion', JSON.stringify(item));
+    } catch {
+      // Ignora
+    }
+    setAviso(`Sesión iniciada: ${usuario.nombre} (${usuario.rol})`);
+  }, []);
+
+  const handleCerrarSesion = useCallback((): void => {
+    try {
+      localStorage.removeItem('ferreteria_sesion');
+    } catch {
+      // Ignora
+    }
+    setOperadorActivo(null);
+    setTurnoId(null);
+    setAviso(null);
+  }, []);
   const [turnoId, setTurnoId] = useState<string | null>(null);
   const [efectivoSugerido, setEfectivoSugerido] = useState<string>('0.00');
   const [efectivoInicialInput, setEfectivoInicialInput] =
@@ -1271,47 +1305,7 @@ export function App(): ReactElement {
       : null;
 
   if (!operadorActivo) {
-    return (
-      <main className="min-h-screen bg-slate-100 p-4 md:p-8">
-        <div className="mx-auto max-w-md rounded-2xl bg-white p-6 shadow-md border border-slate-200">
-          <span className="inline-block rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-            {contexto.negocioNombre} · {contexto.caja.nombre}
-          </span>
-          <h1 className="mt-3 text-2xl font-bold text-slate-900">
-            Ingreso a Caja de Mostrador
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Elegí tu usuario para operar el turno de caja.
-          </p>
-
-          <div className="mt-6 space-y-3">
-            {contexto.operadores.map((op) => (
-              <button
-                key={op.id}
-                type="button"
-                data-testid={`login-${op.rol}`}
-                onClick={() => {
-                  setOperadorActivo(op);
-                }}
-                className="flex w-full items-center justify-between rounded-xl border-2 border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:border-blue-600 hover:bg-blue-50"
-              >
-                <div>
-                  <div className="text-base font-bold text-slate-900">
-                    {op.nombre}
-                  </div>
-                  <div className="text-xs text-slate-500 uppercase tracking-wider">
-                    Rol: {op.rol}
-                  </div>
-                </div>
-                <span className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white">
-                  Entrar
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </main>
-    );
+    return <Login onLoginExitoso={handleLoginExitoso} />;
   }
 
   return (
@@ -1713,6 +1707,17 @@ export function App(): ReactElement {
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              data-testid="btn-cerrar-sesion"
+              onClick={handleCerrarSesion}
+              className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-950/60 hover:text-rose-300 border border-slate-700 transition flex items-center gap-1"
+              title="Cerrar sesión"
+            >
+              <span>Salir</span>
+              <span>🚪</span>
+            </button>
 
             <button
               type="button"
