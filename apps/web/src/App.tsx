@@ -31,6 +31,8 @@ import {
   type DatosTicketTermico,
 } from './utils/impresion-ticket.js';
 import { exportarACSV } from './utils/exportar-csv.js';
+import { imprimirComprobanteFiscal } from './utils/impresion-factura.js';
+import type { ComprobanteFiscalDetalle } from '@ferreteria/shared';
 
 export interface ItemCarrito {
   id: string;
@@ -310,6 +312,8 @@ export function App(): ReactElement {
   const [sincronizando, setSincronizando] = useState<boolean>(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ultimaVentaParaTicket, setUltimaVentaParaTicket] = useState<DatosTicketTermico | null>(null);
+  const [emitirFacturaElectronica, setEmitirFacturaElectronica] = useState<boolean>(false);
+  const [ultimaFacturaEmitida, setUltimaFacturaEmitida] = useState<ComprobanteFiscalDetalle | null>(null);
 
   const recargarCola = useCallback(async () => {
     const lista = await listarOperacionesPendientes();
@@ -987,6 +991,38 @@ export function App(): ReactElement {
     };
 
     const toquesUsados = toquesVentaActual + 1;
+    const itemsParaFactura =
+      itemsCarrito.length > 0
+        ? itemsCarrito.map((it) => ({
+            productoId: it.productoId ?? null,
+            codigo: it.codigo ?? null,
+            descripcion: it.nombre,
+            unidad: it.nombreUnidad || 'unidad',
+            cantidad: it.cantidad,
+            precioUnitario: it.precioUnitario,
+            alicuotaIva: '21' as const,
+            subtotal: it.subtotal,
+          }))
+        : [
+            {
+              descripcion: descripcionVenta.trim() || 'Artículos de ferretería varios',
+              unidad: 'unidad',
+              cantidad: '1.000',
+              precioUnitario: montoVentaFormateado,
+              alicuotaIva: '21' as const,
+              subtotal: montoVentaFormateado,
+            },
+          ];
+
+    const debeFacturar = emitirFacturaElectronica && !modoSinConexion;
+    const tipoCmp =
+      clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
+        ? ('factura_a' as const)
+        : ('factura_b' as const);
+    const clienteIdFact = clienteSeleccionadoVenta?.id ?? null;
+    const razonSocialCli = clienteSeleccionadoVenta?.nombre || 'Consumidor Final';
+    const cuitCli = clienteSeleccionadoVenta?.cuitDni || null;
+    const condIvaCli = clienteSeleccionadoVenta?.condicionIva || 'consumidor_final';
     const datosTicket: DatosTicketTermico = {
       nombreComercio: 'FERRETERÍA & CORRALÓN',
       numeroTicket: ventaId.slice(0, 8).toUpperCase(),
@@ -1004,6 +1040,7 @@ export function App(): ReactElement {
       total: montoVentaFormateado,
     };
     setUltimaVentaParaTicket(datosTicket);
+    setUltimaFacturaEmitida(null);
 
     setMontoEnteroTeclado('0');
     setDescripcionVenta('');
@@ -1040,6 +1077,39 @@ export function App(): ReactElement {
       setAviso(
         `Venta cobrada en ${toquesUsados} toques: ${formatearPesos(montoVentaFormateado)} (${medioSeleccionado.nombre} · ${rubroSeleccionado?.nombre ?? 'Sin rubro'})`,
       );
+
+      if (debeFacturar) {
+        try {
+          const resFact = await fetch(apiUrl('/facturacion/emitir'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${operadorActivo.token}`,
+            },
+            body: JSON.stringify({
+              ventaId,
+              puntoVentaNumero: 1,
+              tipoComprobante: tipoCmp,
+              clienteId: clienteIdFact,
+              cuitCliente: cuitCli,
+              razonSocialCliente: razonSocialCli,
+              condicionIvaCliente: condIvaCli,
+              alicuotaIva: '21',
+              total: montoVentaFormateado,
+              items: itemsParaFactura,
+            }),
+          });
+          if (resFact.ok) {
+            const facturaEmitida = (await resFact.json()) as ComprobanteFiscalDetalle;
+            setUltimaFacturaEmitida(facturaEmitida);
+            setAviso(
+              `Venta cobrada y Factura ${facturaEmitida.tipoComprobante.toUpperCase()} autorizada por ARCA (CAE: ${facturaEmitida.cae ?? 'OK'}).`,
+            );
+          }
+        } catch {
+          // Si falla emisión la venta ya está cobrada en caja
+        }
+      }
     } catch {
       await encolarOperacion(operacion);
       await recargarCola();
@@ -1699,37 +1769,96 @@ export function App(): ReactElement {
             {ultimaVentaParaTicket && (
               <div
                 data-testid="banner-ticket-termico"
-                className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950 flex flex-wrap items-center justify-between gap-3 shadow-sm"
+                className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium flex flex-wrap items-center justify-between gap-3 shadow-sm ${
+                  ultimaFacturaEmitida
+                    ? 'border-blue-300 bg-blue-50 text-blue-950'
+                    : 'border-emerald-300 bg-emerald-50 text-emerald-950'
+                }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">🖨</span>
-                  <span>
-                    Comprobante listo ({formatearPesos(ultimaVentaParaTicket.total)} - {ultimaVentaParaTicket.medioCobro}):
+                  <span className="text-xl">
+                    {ultimaFacturaEmitida ? '🧾' : '🖨'}
                   </span>
+                  <div>
+                    <div className="font-bold">
+                      {ultimaFacturaEmitida
+                        ? `Factura ${ultimaFacturaEmitida.tipoComprobante.toUpperCase()} Autorizada por ARCA (CAE: ${ultimaFacturaEmitida.cae ?? 'OK'})`
+                        : `Comprobante listo (${formatearPesos(ultimaVentaParaTicket.total)} - ${ultimaVentaParaTicket.medioCobro}):`}
+                    </div>
+                    {ultimaFacturaEmitida && (
+                      <div className="text-xs text-blue-800">
+                        Total {formatearPesos(ultimaFacturaEmitida.total)} · Cliente: {ultimaFacturaEmitida.razonSocialCliente}
+                        {ultimaFacturaEmitida.cuitCliente ? ` (${ultimaFacturaEmitida.cuitCliente})` : ''}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 80 });
-                    }}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
-                  >
-                    Imprimir 80mm
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 58 });
-                    }}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
-                  >
-                    Imprimir 58mm
-                  </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {ultimaFacturaEmitida ? (
+                    <>
+                      <button
+                        type="button"
+                        data-testid="btn-imprimir-factura-a4"
+                        onClick={() => {
+                          imprimirComprobanteFiscal(
+                            ultimaFacturaEmitida,
+                            {
+                              razonSocial: 'FERRETERÍA & CORRALÓN S.R.L.',
+                              cuit: '30-71234567-8',
+                              iibb: '30-71234567-8',
+                              inicioActividades: '2020-01-01',
+                              domicilio: 'Av. Libertador 1234, CABA',
+                              condicionIva: 'IVA Responsable Inscripto',
+                            },
+                            { formato: 'a4' },
+                          );
+                        }}
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                      >
+                        Factura Oficial (A4)
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="btn-imprimir-factura-termica"
+                        onClick={() => {
+                          imprimirTicketTermico({
+                            ...ultimaVentaParaTicket,
+                            nombreComercio: `FACTURA ${ultimaFacturaEmitida.tipoComprobante.toUpperCase()}`,
+                            anchoPapelMm: 80,
+                          });
+                        }}
+                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 shadow-sm"
+                      >
+                        Factura Ticket (80mm)
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 80 });
+                        }}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+                      >
+                        Imprimir 80mm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          imprimirTicketTermico({ ...ultimaVentaParaTicket, anchoPapelMm: 58 });
+                        }}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+                      >
+                        Imprimir 58mm
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
                       setUltimaVentaParaTicket(null);
+                      setUltimaFacturaEmitida(null);
                     }}
                     className="rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-300"
                   >
@@ -1739,7 +1868,7 @@ export function App(): ReactElement {
               </div>
             )}
 
-            {/* TABLERO DE INICIO */}
+                {/* TABLERO DE INICIO */}
             {pestana === 'inicio' && (
               <InicioDashboard
                 turnoId={turnoId}
@@ -2482,6 +2611,51 @@ export function App(): ReactElement {
                       }}
                       className="mt-1 w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm"
                     />
+                  </div>
+
+                  {/* Opción de Facturación Electrónica ARCA */}
+                  <div
+                    data-testid="caja-facturacion-mostrador"
+                    className={`rounded-xl border p-3 transition ${
+                      emitirFacturaElectronica
+                        ? 'border-blue-400 bg-blue-50/70 shadow-xs'
+                        : 'border-slate-200 bg-slate-50/50'
+                    }`}
+                  >
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          data-testid="check-emitir-factura"
+                          checked={emitirFacturaElectronica}
+                          onChange={(e) => {
+                            setEmitirFacturaElectronica(e.target.checked);
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-800">
+                            🧾 Emitir Factura Electrónica ARCA
+                          </span>
+                          <p className="text-[11px] text-slate-500">
+                            {clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
+                              ? 'Emitirá Factura A (Cliente Resp. Inscripto)'
+                              : 'Emitirá Factura B (Consumidor Final)'}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                          emitirFacturaElectronica
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
+                          ? 'FACTURA A'
+                          : 'FACTURA B'}
+                      </span>
+                    </label>
                   </div>
                 </div>
 

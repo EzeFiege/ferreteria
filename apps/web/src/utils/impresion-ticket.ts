@@ -11,6 +11,7 @@ export interface ItemTicketTermico {
 
 export interface DatosTicketTermico {
   nombreComercio: string;
+  logoUrl?: string | undefined;
   cuitComercio?: string | undefined;
   direccionComercio?: string | undefined;
   telefonoComercio?: string | undefined;
@@ -99,7 +100,14 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
       </style>
     </head>
     <body>
-      <div class="text-center font-bold" style="font-size: 14px;">
+      ${
+        datos.logoUrl
+          ? `<div class="text-center" style="margin-bottom: 6px;">
+              <img src="${datos.logoUrl}" alt="Logo" style="max-height: 48px; max-width: 140px; object-fit: contain;" />
+            </div>`
+          : ''
+      }
+      <div class="text-center font-bold" style="font-size: 14px; letter-spacing: 0.5px;">
         ${datos.nombreComercio}
       </div>
       ${

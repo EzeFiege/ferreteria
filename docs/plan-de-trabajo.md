@@ -375,6 +375,39 @@ Estado:
   - Integración en el menú principal (`apps/web/src/App.tsx`): pestaña `🛡️ Auditoría del Sistema` en la sección "Control & Sistema".
 - [x] Verificación de calidad: `pnpm typecheck`, `pnpm lint`, `pnpm build` y suite completa de tests de Vitest (14 archivos, 73 tests pasando al 100% contra PostgreSQL real).
 
+---
+
+## Fase 12 — Facturación Automática en Mostrador (ARCA / AFIP) y Detalle de Ítems (Completada ✅)
+
+Objetivo: permitir que desde el cobro de una venta en mostrador se pueda emitir opcionalmente la Factura Electrónica oficial de ARCA/AFIP (Factura A o B/C según la condición de IVA del cliente), vinculada a la venta y persistiendo el desglose completo de ítems (cantidades, precios unitarios, IVA, subtotales), con generación de CAE, código QR oficial y plantillas de impresión profesional A4 y térmica comanderas (80mm / 58mm).
+
+Estado:
+- [x] Migración `011_items_factura_y_venta.sql`:
+  - Tabla inmutable `item_comprobante_fiscal`: multi-tenant con clave compuesta `(id, negocio_id)`, FK a `comprobante_fiscal(id, negocio_id)` con `on delete cascade`, `producto_id`, `codigo`, `descripcion`, `unidad`, `cantidad numeric(14,3)`, `precio_unitario numeric(14,2)`, `alicuota_iva text`, `subtotal numeric(14,2)`.
+  - RLS activado con política `item_comprobante_fiscal_tenant_isolation` (`negocio_id = current_setting('app.negocio_id', true)::uuid`).
+  - Permisos otorgados a `app_user` (`grant select, insert on item_comprobante_fiscal to app_user`).
+  - Índices sobre `(negocio_id, comprobante_id)` y `(negocio_id, producto_id)`.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `itemComprobanteFiscalInputSchema`, `ItemComprobanteFiscalInput`, `ItemComprobanteFiscalDetalle`.
+  - Actualización de `emitirComprobanteFiscalSchema` para recibir opcionalmente `items?: ItemComprobanteFiscalInput[]`.
+  - Actualización de `ComprobanteFiscalDetalle` con campo `items?: ItemComprobanteFiscalDetalle[]`.
+- [x] Backend API (`apps/api/src/routes/facturacion.ts`):
+  - Inserción atómica dentro de la transacción de los renglones en `item_comprobante_fiscal` al llamar a `POST /facturacion/emitir`.
+  - Endpoint `GET /facturacion/comprobantes/:id`: consulta y mapea el detalle completo de ítems asociados al comprobante.
+  - Test de integración añadido en `apps/api/src/routes/facturacion.test.ts` (test 6: comprobación de persistencia y lectura de ítems).
+- [x] Módulo de impresión de Facturas Oficiales (`apps/web/src/utils/impresion-factura.ts`):
+  - Formato formal A4 y térmica comandera 80mm con letra identificadora ("A", "B", "C"), código AFIP (01, 06, 11), punto de venta y número correlativo, datos del emisor y receptor (CUIT, Ingresos Brutos, Condición IVA), tabla de productos con discriminación impositiva, CAE, Vto. CAE y Código QR oficial de ARCA.
+  - Mejora en `apps/web/src/utils/impresion-ticket.ts`: soporte para `logoUrl` y estética limpia.
+- [x] Integración en mostrador (`apps/web/src/App.tsx`):
+  - Switch interactivo en la zona de cobro: `[✓] Emitir Factura Electrónica ARCA`, con detección automática de Factura A (para Responsables Inscriptos) o Factura B (para Consumidores Finales).
+  - Al cobrar, si la opción está activa, se registra la venta y se emite automáticamente el comprobante oficial con CAE e ítems del carrito.
+  - Banner dinámico tras el cobro: botones para `Factura Oficial (A4)`, `Factura Ticket (80mm)`, `Ticket Térmico (80mm/58mm)` y `✕ Cerrar`.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los paquetes.
+  - `pnpm lint` con cero errores.
+  - Suite completa de 74 tests pasando en PostgreSQL real con Testcontainers (`pnpm test`).
+  - `pnpm build` de Vite completado exitosamente.
+
 
 
 

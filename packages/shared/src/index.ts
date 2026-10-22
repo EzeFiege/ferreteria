@@ -553,6 +553,21 @@ export const guardarPuntoVentaSchema = z.object({
 });
 export type GuardarPuntoVentaInput = z.infer<typeof guardarPuntoVentaSchema>;
 
+export const itemComprobanteFiscalInputSchema = z.object({
+  id: uuidSchema.optional(),
+  productoId: uuidSchema.optional().nullable(),
+  codigo: z.string().max(50).optional().nullable(),
+  descripcion: z.string().min(1).max(300),
+  unidad: z.string().max(20).default('unidad'),
+  cantidad: cantidadDecimalSchema,
+  precioUnitario: montoNoNegativoSchema,
+  alicuotaIva: z.enum(['21', '10.5', '27', '0']).default('21'),
+  subtotal: montoNoNegativoSchema,
+});
+export type ItemComprobanteFiscalInput = z.infer<
+  typeof itemComprobanteFiscalInputSchema
+>;
+
 export const emitirComprobanteFiscalSchema = z.object({
   id: uuidSchema.optional(),
   ventaId: uuidSchema.optional().nullable(),
@@ -566,10 +581,25 @@ export const emitirComprobanteFiscalSchema = z.object({
   alicuotaIva: z.enum(['21', '10.5', '27', '0']).default('21'),
   total: montoPositivoSchema,
   enContingenciaOffline: z.boolean().default(false),
+  items: z.array(itemComprobanteFiscalInputSchema).optional(),
 });
 export type EmitirComprobanteFiscalInput = z.infer<
   typeof emitirComprobanteFiscalSchema
 >;
+
+export interface ItemComprobanteFiscalDetalle {
+  id: string;
+  comprobanteId: string;
+  productoId: string | null;
+  codigo: string | null;
+  descripcion: string;
+  unidad: string;
+  cantidad: string;
+  precioUnitario: string;
+  alicuotaIva: string;
+  subtotal: string;
+  creadoEn: string;
+}
 
 export interface ComprobanteFiscalDetalle {
   id: string;
@@ -593,6 +623,7 @@ export interface ComprobanteFiscalDetalle {
   vencimientoCae: string | null;
   codigoQrArca: string | null;
   creadoEn: string;
+  items?: ItemComprobanteFiscalDetalle[];
 }
 
 // -------------------------------------------------------------

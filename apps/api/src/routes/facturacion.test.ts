@@ -243,4 +243,62 @@ describe('Fase 6 — Facturación Fiscal Electrónica ARCA / AFIP', () => {
     const comprobantesB = resB.json<Array<{ id: string }>>();
     expect(comprobantesB.length).toBe(0);
   });
+
+  it('6. Emite comprobante fiscal con detalle de ítems y lo recupera por ID', async () => {
+    const resEmitir = await app.inject({
+      method: 'POST',
+      url: '/facturacion/emitir',
+      headers: { Authorization: `Bearer ${negocioA.tokenCajero}` },
+      payload: {
+        puntoVentaNumero: 1,
+        tipoComprobante: 'factura_b',
+        cuitCliente: '20-12345678-9',
+        razonSocialCliente: 'Pérez Juan',
+        condicionIvaCliente: 'consumidor_final',
+        alicuotaIva: '21',
+        total: '10000.00',
+        items: [
+          {
+            codigo: 'MART-01',
+            descripcion: 'Martillo Galponero 500g',
+            unidad: 'unidad',
+            cantidad: '2.000',
+            precioUnitario: '4000.00',
+            alicuotaIva: '21',
+            subtotal: '8000.00',
+          },
+          {
+            codigo: 'CLAV-01',
+            descripcion: 'Clavos punta parís 2 pulg',
+            unidad: 'kilo',
+            cantidad: '1.000',
+            precioUnitario: '2000.00',
+            alicuotaIva: '21',
+            subtotal: '2000.00',
+          },
+        ],
+      },
+    });
+
+    expect(resEmitir.statusCode).toBe(201);
+    const factura = resEmitir.json<ComprobanteFiscalDetalle>();
+    expect(factura.items).toBeDefined();
+    expect(factura.items).toHaveLength(2);
+    expect(factura.items?.[0]?.descripcion).toBe('Martillo Galponero 500g');
+    expect(factura.items?.[0]?.cantidad).toBe('2.000');
+    expect(factura.items?.[1]?.codigo).toBe('CLAV-01');
+
+    // Recuperar por ID
+    const resGet = await app.inject({
+      method: 'GET',
+      url: `/facturacion/comprobantes/${factura.id}`,
+      headers: { Authorization: `Bearer ${negocioA.tokenCajero}` },
+    });
+    expect(resGet.statusCode).toBe(200);
+    const facturaRecuperada = resGet.json<ComprobanteFiscalDetalle>();
+    expect(facturaRecuperada.id).toBe(factura.id);
+    expect(facturaRecuperada.items).toHaveLength(2);
+    expect(facturaRecuperada.items?.[0]?.subtotal).toBe('8000.00');
+    expect(facturaRecuperada.items?.[1]?.subtotal).toBe('2000.00');
+  });
 });

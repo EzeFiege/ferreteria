@@ -439,6 +439,21 @@ export const comprobanteFiscal = pgTable('comprobante_fiscal', {
 
 
 
+export const itemComprobanteFiscal = pgTable('item_comprobante_fiscal', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  comprobanteId: uuid('comprobante_id').notNull(),
+  productoId: uuid('producto_id'),
+  codigo: text('codigo'),
+  descripcion: text('descripcion').notNull(),
+  unidad: text('unidad').notNull().default('unidad'),
+  cantidad: numeric('cantidad', { precision: 14, scale: 3 }).notNull(),
+  precioUnitario: numeric('precio_unitario', { precision: 14, scale: 2 }).notNull(),
+  alicuotaIva: text('alicuota_iva').notNull().default('21'),
+  subtotal: numeric('subtotal', { precision: 14, scale: 2 }).notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Fase 7: Contabilidad y Partida Doble
 export const cuentaContable = pgTable('cuenta_contable', {
   id: uuid('id').primaryKey().defaultRandom(),

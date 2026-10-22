@@ -19,6 +19,7 @@ import {
 import { withTenantTransaction } from '../db/context.js';
 import {
   comprobanteFiscal,
+  itemComprobanteFiscal,
   puntoVenta,
 } from '../db/schema.js';
 
@@ -387,32 +388,67 @@ export function registerFacturacionRoutes(
             throw new Error('No se pudo registrar el comprobante fiscal.');
           }
 
-          return creado;
+          let itemsInsertados: (typeof itemComprobanteFiscal.$inferSelect)[] = [];
+          if (body.items && body.items.length > 0) {
+            itemsInsertados = await db
+              .insert(itemComprobanteFiscal)
+              .values(
+                body.items.map((it) => ({
+                  ...(it.id ? { id: it.id } : {}),
+                  negocioId: claims.negocioId,
+                  comprobanteId: creado.id,
+                  productoId: it.productoId ?? null,
+                  codigo: it.codigo ?? null,
+                  descripcion: it.descripcion,
+                  unidad: it.unidad,
+                  cantidad: it.cantidad,
+                  precioUnitario: it.precioUnitario,
+                  alicuotaIva: it.alicuotaIva,
+                  subtotal: it.subtotal,
+                })),
+              )
+              .returning();
+          }
+
+          return { comprobante: creado, items: itemsInsertados };
         },
       );
 
       const detalle: ComprobanteFiscalDetalle = {
-        id: nuevoComprobante.id,
-        puntoVentaNumero: nuevoComprobante.numeroPuntoVenta,
-        tipoComprobante: nuevoComprobante.tipoComprobante,
-        numeroComprobante: nuevoComprobante.numeroComprobante,
-        codigoAfip: nuevoComprobante.codigoAfip,
-        fechaEmision: nuevoComprobante.fechaEmision,
-        ventaId: nuevoComprobante.ventaId,
-        cuitCliente: nuevoComprobante.cuitCliente,
-        razonSocialCliente: nuevoComprobante.razonSocialCliente,
-        condicionIvaCliente: nuevoComprobante.condicionIvaCliente as CondicionIva,
-        subtotalNetoGravado: nuevoComprobante.subtotalNetoGravado,
-        subtotalIva21: nuevoComprobante.subtotalIva21,
-        subtotalIva105: nuevoComprobante.subtotalIva105,
-        subtotalIva27: nuevoComprobante.subtotalIva27,
-        subtotalExento: nuevoComprobante.subtotalExento,
-        total: nuevoComprobante.total,
-        estado: nuevoComprobante.estado,
-        cae: nuevoComprobante.cae,
-        vencimientoCae: nuevoComprobante.vencimientoCae,
-        codigoQrArca: nuevoComprobante.codigoQrArca,
-        creadoEn: nuevoComprobante.creadoEn.toISOString(),
+        id: nuevoComprobante.comprobante.id,
+        puntoVentaNumero: nuevoComprobante.comprobante.numeroPuntoVenta,
+        tipoComprobante: nuevoComprobante.comprobante.tipoComprobante,
+        numeroComprobante: nuevoComprobante.comprobante.numeroComprobante,
+        codigoAfip: nuevoComprobante.comprobante.codigoAfip,
+        fechaEmision: nuevoComprobante.comprobante.fechaEmision,
+        ventaId: nuevoComprobante.comprobante.ventaId,
+        cuitCliente: nuevoComprobante.comprobante.cuitCliente,
+        razonSocialCliente: nuevoComprobante.comprobante.razonSocialCliente,
+        condicionIvaCliente: nuevoComprobante.comprobante.condicionIvaCliente as CondicionIva,
+        subtotalNetoGravado: nuevoComprobante.comprobante.subtotalNetoGravado,
+        subtotalIva21: nuevoComprobante.comprobante.subtotalIva21,
+        subtotalIva105: nuevoComprobante.comprobante.subtotalIva105,
+        subtotalIva27: nuevoComprobante.comprobante.subtotalIva27,
+        subtotalExento: nuevoComprobante.comprobante.subtotalExento,
+        total: nuevoComprobante.comprobante.total,
+        estado: nuevoComprobante.comprobante.estado,
+        cae: nuevoComprobante.comprobante.cae,
+        vencimientoCae: nuevoComprobante.comprobante.vencimientoCae,
+        codigoQrArca: nuevoComprobante.comprobante.codigoQrArca,
+        creadoEn: nuevoComprobante.comprobante.creadoEn.toISOString(),
+        items: nuevoComprobante.items.map((it) => ({
+          id: it.id,
+          comprobanteId: it.comprobanteId,
+          productoId: it.productoId,
+          codigo: it.codigo,
+          descripcion: it.descripcion,
+          unidad: it.unidad,
+          cantidad: it.cantidad,
+          precioUnitario: it.precioUnitario,
+          alicuotaIva: it.alicuotaIva,
+          subtotal: it.subtotal,
+          creadoEn: it.creadoEn.toISOString(),
+        })),
       };
 
       return await reply.code(201).send(detalle);
@@ -446,6 +482,16 @@ export function registerFacturacionRoutes(
 
           if (!f) return null;
 
+          const items = await db
+            .select()
+            .from(itemComprobanteFiscal)
+            .where(
+              and(
+                eq(itemComprobanteFiscal.comprobanteId, compId),
+                eq(itemComprobanteFiscal.negocioId, claims.negocioId),
+              ),
+            );
+
           return {
             id: f.id,
             puntoVentaNumero: f.numeroPuntoVenta,
@@ -469,6 +515,19 @@ export function registerFacturacionRoutes(
             vencimientoCae: f.vencimientoCae,
             codigoQrArca: f.codigoQrArca,
             creadoEn: f.creadoEn.toISOString(),
+            items: items.map((it) => ({
+              id: it.id,
+              comprobanteId: it.comprobanteId,
+              productoId: it.productoId,
+              codigo: it.codigo,
+              descripcion: it.descripcion,
+              unidad: it.unidad,
+              cantidad: it.cantidad,
+              precioUnitario: it.precioUnitario,
+              alicuotaIva: it.alicuotaIva,
+              subtotal: it.subtotal,
+              creadoEn: it.creadoEn.toISOString(),
+            })),
           };
         },
       );
