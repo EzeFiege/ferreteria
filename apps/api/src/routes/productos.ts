@@ -3,9 +3,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { ZodError } from 'zod';
 import {
+  aCentavos,
   ajusteStockSchema,
   guardarListaPrecioSchema,
   guardarProductoSchema,
+  importarProductosMasivoSchema,
 } from '@ferreteria/shared';
 import {
   assertRoles,
@@ -21,6 +23,7 @@ import {
   productoCodigoBarra,
 } from '../db/schema.js';
 import { lookupEanExterno } from '../services/catalog-lookup.js';
+import { registrarAuditoria } from '../services/auditoria-service.js';
 
 export interface ProductosRoutesOptions {
   pool: pg.Pool;
@@ -550,6 +553,224 @@ export function registerProductosRoutes(
       );
 
       return await reply.code(201).send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 9. Carga masiva desde Excel / CSV de artículos y precios
+  app.post('/productos/importar-masivo', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['encargado', 'dueno']);
+
+      const body = importarProductosMasivoSchema.parse(request.body);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          // 1. Obtener margen de lista 'Mostrador' para cálculo inverso si falta costo
+          const listasRes = await client.query<{
+            nombre: string;
+            margen_pct: string;
+          }>(`select nombre, margen_pct from lista_precio where activo = true`);
+          const margenMostradorRow = listasRes.rows.find(
+            (l) => l.nombre.toLowerCase() === 'mostrador',
+          );
+          const margenMostrador = margenMostradorRow
+            ? Number(margenMostradorRow.margen_pct)
+            : 60.0;
+
+          // 2. Resolver o sembrar rubros
+          const rubrosMap = new Map<string, string>();
+          const rubrosExistentesRes = await client.query<{
+            id: string;
+            nombre: string;
+          }>(`select id, nombre from rubro`);
+          for (const r of rubrosExistentesRes.rows) {
+            rubrosMap.set(r.nombre.trim().toLowerCase(), r.id);
+          }
+
+          let rubrosCreados = 0;
+          for (const item of body.productos) {
+            if (item.rubroNombre && item.rubroNombre.trim()) {
+              const rubroLimpio = item.rubroNombre.trim();
+              const rubroKey = rubroLimpio.toLowerCase();
+              if (!rubrosMap.has(rubroKey)) {
+                const nuevoRubroRes = await client.query<{ id: string }>(
+                  `insert into rubro (negocio_id, nombre) values ($1, $2)
+                   on conflict (negocio_id, nombre) do update set nombre = excluded.nombre
+                   returning id`,
+                  [claims.negocioId, rubroLimpio],
+                );
+                const nuevoId = nuevoRubroRes.rows[0]?.id;
+                if (nuevoId) {
+                  rubrosMap.set(rubroKey, nuevoId);
+                  rubrosCreados++;
+                }
+              }
+            }
+          }
+
+          let creados = 0;
+          let actualizados = 0;
+          let movimientosStockCreados = 0;
+
+          for (const item of body.productos) {
+            const rubroId = item.rubroNombre
+              ? rubrosMap.get(item.rubroNombre.trim().toLowerCase()) ?? null
+              : null;
+
+            // Determinar costo base:
+            // Si viene costoBase > 0, se respeta.
+            // Si viene 0.00 y viene precioMostradorSugerido > 0, deducir con margen.
+            let costoFinal = item.costoBase;
+            if (
+              aCentavos(item.costoBase) <= 0n &&
+              item.precioMostradorSugerido &&
+              aCentavos(item.precioMostradorSugerido) > 0n
+            ) {
+              const precioNum = Number(item.precioMostradorSugerido);
+              const costoNum = precioNum / (1 + margenMostrador / 100);
+              costoFinal = costoNum.toFixed(2);
+            }
+
+            // Buscar si ya existe por código SKU
+            const existRes = await client.query<{ id: string; costo_base: string }>(
+              `select id, costo_base from producto where codigo = $1 limit 1`,
+              [item.codigo],
+            );
+
+            let prodId: string;
+            const filaExistente = existRes.rows[0];
+            if (filaExistente) {
+              prodId = filaExistente.id;
+              await client.query(
+                `update producto
+                 set nombre = $1,
+                     marca = coalesce($2, marca),
+                     rubro_id = coalesce($3, rubro_id),
+                     costo_base = $4,
+                     unidad_principal = coalesce($5, unidad_principal),
+                     stock_minimo = coalesce($6, stock_minimo)
+                 where id = $7`,
+                [
+                  item.nombre,
+                  item.marca ?? null,
+                  rubroId,
+                  costoFinal,
+                  item.unidadPrincipal,
+                  item.stockMinimo,
+                  prodId,
+                ],
+              );
+              actualizados++;
+            } else {
+              const insertRes = await client.query<{ id: string }>(
+                `insert into producto (
+                   negocio_id, codigo, nombre, marca, rubro_id,
+                   costo_base, unidad_principal, stock_minimo
+                 ) values ($1, $2, $3, $4, $5, $6, $7, $8)
+                 returning id`,
+                [
+                  claims.negocioId,
+                  item.codigo,
+                  item.nombre,
+                  item.marca ?? null,
+                  rubroId,
+                  costoFinal,
+                  item.unidadPrincipal,
+                  item.stockMinimo,
+                ],
+              );
+              const filaCreada = insertRes.rows[0];
+              if (!filaCreada) {
+                throw new Error('Error al insertar producto');
+              }
+              prodId = filaCreada.id;
+              creados++;
+            }
+
+            // Si viene código de barra / EAN
+            if (item.codigoBarra && item.codigoBarra.trim()) {
+              await client.query(
+                `insert into producto_codigo_barra (negocio_id, producto_id, codigo_barra, es_principal)
+                 values ($1, $2, $3, true)
+                 on conflict (negocio_id, codigo_barra) do nothing`,
+                [claims.negocioId, prodId, item.codigoBarra.trim()],
+              );
+            }
+
+            // Si viene stockActual, conciliar stock físico con movimiento inmutable
+            if (item.stockActual !== undefined) {
+              const stockRes = await client.query<{ stock_actual_base: string }>(
+                `select coalesce(stock_actual_base, 0) as stock_actual_base
+                 from v_stock_actual
+                 where producto_id = $1`,
+                [prodId],
+              );
+              const actualBase = Number(stockRes.rows[0]?.stock_actual_base ?? 0);
+              const deseado = Number(item.stockActual);
+              const diff = Math.round((deseado - actualBase) * 1000) / 1000;
+
+              if (Math.abs(diff) >= 0.001) {
+                const sentido: 'in' | 'out' = diff > 0 ? 'in' : 'out';
+                const tipo = diff > 0 ? 'ajuste_sobrante' : 'ajuste_faltante';
+                const cantStr = Math.abs(diff).toFixed(3);
+
+                await client.query(
+                  `insert into movimiento_stock (
+                     negocio_id, producto_id, tipo, sentido, cantidad,
+                     unidad, cantidad_base, costo_unitario, notas, creado_por
+                   ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                  [
+                    claims.negocioId,
+                    prodId,
+                    tipo,
+                    sentido,
+                    cantStr,
+                    item.unidadPrincipal,
+                    cantStr,
+                    costoFinal,
+                    'Carga masiva desde Excel/CSV',
+                    claims.usuarioId,
+                  ],
+                );
+                movimientosStockCreados++;
+              }
+            }
+          }
+
+          // Registrar auditoría de la importación
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email ?? null,
+            rol: claims.rol,
+            accion: 'cambio_precio',
+            entidad: 'articulo',
+            detalles: {
+              modulo: 'importacion_masiva',
+              totalLote: body.productos.length,
+              creados,
+              actualizados,
+              movimientosStockCreados,
+              rubrosCreados,
+            },
+          });
+
+          return {
+            totalProcesados: body.productos.length,
+            creados,
+            actualizados,
+            movimientosStockCreados,
+            rubrosCreados,
+          };
+        },
+      );
+
+      return await reply.send(resultado);
     } catch (err: unknown) {
       return handleRouteError(err, request, reply);
     }

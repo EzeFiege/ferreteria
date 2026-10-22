@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
+import { ImportadorMasivoModal } from './ImportadorMasivoModal.js';
 
 interface ListaPrecioItem {
   id: string;
@@ -74,6 +75,7 @@ export function CatalogoStock({
   const [modalAltaAbierto, setModalAltaAbierto] = useState<boolean>(false);
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState<boolean>(false);
   const [modalEtiquetaAbierto, setModalEtiquetaAbierto] = useState<boolean>(false);
+  const [modalImportarAbierto, setModalImportarAbierto] = useState<boolean>(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState<ProductoItem | null>(null);
 
   // Formulario de Alta / Edición
@@ -465,22 +467,35 @@ export function CatalogoStock({
         </div>
 
         {puedeModificar && (
-          <button
-            type="button"
-            onClick={() => {
-              abrirModalAltaConDatos({
-                codigo: '',
-                nombre: '',
-                marca: '',
-                imagenUrl: '',
-                codigosBarra: '',
-                origen: null,
-              });
-            }}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-500 flex items-center justify-center gap-2"
-          >
-            <span>+ Nuevo Artículo</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="btn-carga-masiva"
+              onClick={() => {
+                setModalImportarAbierto(true);
+              }}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-bold text-blue-700 shadow-sm hover:bg-blue-100 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span>📥</span>
+              <span>Carga Masiva (Excel/CSV)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                abrirModalAltaConDatos({
+                  codigo: '',
+                  nombre: '',
+                  marca: '',
+                  imagenUrl: '',
+                  codigosBarra: '',
+                  origen: null,
+                });
+              }}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-500 flex items-center justify-center gap-2"
+            >
+              <span>+ Nuevo Artículo</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -1066,6 +1081,21 @@ export function CatalogoStock({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Importación Masiva desde Excel / CSV */}
+      {modalImportarAbierto && (
+        <ImportadorMasivoModal
+          token={token}
+          productosActuales={productos}
+          onCerrar={() => {
+            setModalImportarAbierto(false);
+          }}
+          onImportadoExitoso={(mensaje) => {
+            setAviso(mensaje);
+            void cargarProductos();
+          }}
+        />
       )}
     </div>
   );

@@ -381,4 +381,142 @@ interface TestLookupResponse {
     expect(resB.statusCode).toBe(200);
     expect(resB.json<TestProducto[]>().length).toBe(0);
   });
+
+  describe('Fase 14 — Carga masiva desde Excel / CSV de artículos y precios', () => {
+    it('rechaza la importación masiva si el usuario es cajero', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/productos/importar-masivo',
+        headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+        payload: {
+          productos: [
+            {
+              codigo: 'BULON-8X50',
+              nombre: 'Bulón 8x50 cabeza hexagonal',
+              costoBase: '150.00',
+            },
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('importa masivamente nuevos artículos, siembra rubros faltantes y registra stock inicial inmutable', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/productos/importar-masivo',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+        payload: {
+          productos: [
+            {
+              codigo: 'IMP-CLAVO-2',
+              nombre: 'Clavo punta parís 2 pulgadas',
+              marca: 'Acindar',
+              rubroNombre: 'Fijaciones y Tornillos',
+              costoBase: '500.00',
+              stockMinimo: '10.000',
+              stockActual: '50.000',
+              codigoBarra: '7791234567890',
+            },
+            {
+              codigo: 'IMP-DISCO-CORTE',
+              nombre: 'Disco de corte fino 115mm',
+              marca: 'Norton',
+              rubroNombre: 'Herramientas',
+              costoBase: '0.00',
+              precioMostradorSugerido: '1600.00', // Con margen mostrador 60%, costo aprox 1000.00
+              stockActual: '20.000',
+            },
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = res.json<{
+        totalProcesados: number;
+        creados: number;
+        actualizados: number;
+        movimientosStockCreados: number;
+        rubrosCreados: number;
+      }>();
+
+      expect(data.totalProcesados).toBe(2);
+      expect(data.creados).toBe(2);
+      expect(data.movimientosStockCreados).toBe(2);
+      expect(data.rubrosCreados).toBeGreaterThanOrEqual(1);
+
+      // Verificar que el producto y su stock se reflejen en la vista v_stock_actual
+      const resList = await app.inject({
+        method: 'GET',
+        url: '/productos?q=IMP-CLAVO-2',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+      });
+
+      expect(resList.statusCode).toBe(200);
+      const prods = resList.json<Array<{ codigo: string; stock_actual_base: string; costo_base: string }>>();
+      expect(prods.length).toBe(1);
+      const prodClavo = prods[0];
+      expect(prodClavo).toBeDefined();
+      expect(prodClavo?.codigo).toBe('IMP-CLAVO-2');
+      expect(Number(prodClavo?.stock_actual_base)).toBe(50);
+      expect(prodClavo?.costo_base).toBe('500.00');
+
+      // Verificar que el producto con costo deducido de mostrador tenga costo calculado
+      const resDisco = await app.inject({
+        method: 'GET',
+        url: '/productos?q=IMP-DISCO-CORTE',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+      });
+      const discoProds = resDisco.json<Array<{ codigo: string; costo_base: string; stock_actual_base: string }>>();
+      expect(discoProds.length).toBe(1);
+      const prodDisco = discoProds[0];
+      expect(prodDisco).toBeDefined();
+      expect(Number(prodDisco?.costo_base)).toBeCloseTo(1000, 1);
+      expect(Number(prodDisco?.stock_actual_base)).toBe(20);
+    });
+
+    it('actualiza artículos existentes e inserta ajuste de stock por la diferencia', async () => {
+      // Re-importar IMP-CLAVO-2 con nuevo costo y nuevo stock de 65.000 (diferencia +15.000)
+      const res = await app.inject({
+        method: 'POST',
+        url: '/productos/importar-masivo',
+        headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+        payload: {
+          productos: [
+            {
+              codigo: 'IMP-CLAVO-2',
+              nombre: 'Clavo punta parís 2 pulg (Acero)',
+              costoBase: '550.00',
+              stockActual: '65.000',
+            },
+          ],
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const data = res.json<{
+        creados: number;
+        actualizados: number;
+        movimientosStockCreados: number;
+      }>();
+
+      expect(data.creados).toBe(0);
+      expect(data.actualizados).toBe(1);
+      expect(data.movimientosStockCreados).toBe(1);
+
+      // El stock ahora debe ser 65.000
+      const resList = await app.inject({
+        method: 'GET',
+        url: '/productos?q=IMP-CLAVO-2',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+      });
+      const prods = resList.json<Array<{ codigo: string; stock_actual_base: string; costo_base: string; nombre: string }>>();
+      const prodActualizado = prods[0];
+      expect(prodActualizado).toBeDefined();
+      expect(prodActualizado?.nombre).toBe('Clavo punta parís 2 pulg (Acero)');
+      expect(prodActualizado?.costo_base).toBe('550.00');
+      expect(Number(prodActualizado?.stock_actual_base)).toBe(65);
+    });
+  });
 });

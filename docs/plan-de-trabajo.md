@@ -435,6 +435,39 @@ Estado:
   - Suite completa de **80 tests pasando al 100%** (`pnpm test`).
   - Compilación de producción con Vite (`pnpm build`) exitosa.
 
+---
+
+## Fase 14 — Carga Masiva desde Excel / CSV de Artículos y Precios (Completada ✅)
+
+Objetivo: permitir a los encargados y dueños cargar o actualizar masivamente el catálogo de artículos de la ferretería a partir de archivos de Excel / CSV o pegando celdas directamente desde el portapapeles, actualizando precios de costo y venta, resolviendo rubros automáticamente y conciliando existencias de stock en el libro inmutable de Kardex (`movimiento_stock`).
+
+Estado:
+- [x] Esquemas compartidos en `packages/shared`:
+  - `itemImportacionProductoSchema`, `importarProductosMasivoSchema`, `ItemImportacionProducto`, `ImportarProductosMasivoInput`, `ResultadoImportacionMasiva`.
+- [x] Backend API (`apps/api/src/routes/productos.ts`):
+  - Endpoint `POST /productos/importar-masivo` con control de roles (`encargado`, `dueno`).
+  - Resolución y siembra automática de rubros inexistentes con `on conflict (negocio_id, nombre) do update`.
+  - Inserción y actualización atómica en tabla `producto` (`on conflict (negocio_id, codigo) do update`).
+  - Deducción automática de costo base cuando se proporciona precio de venta mostrador sin costo.
+  - Asociación de códigos de barra / EAN en `producto_codigo_barra`.
+  - Conciliación de stock físico en el libro inmutable `movimiento_stock`: calcula la diferencia contra `v_stock_actual` y registra movimientos de auditoría (`ajuste_sobrante` o `ajuste_faltante`) respetando la regla 1 de AGENTS.md.
+  - Registro de auditoría centralizada inmutable en `registro_auditoria` (`cambio_precio` sobre `articulo`).
+  - Tests de integración añadidos en `apps/api/src/routes/productos.test.ts` (11 tests pasando).
+- [x] Frontend Web (`apps/web`):
+  - Componente modal `apps/web/src/ImportadorMasivoModal.tsx`:
+    - Descarga de plantilla modelo `.csv` compatible con Excel con un solo clic.
+    - Soporte dual de carga: subida de archivo `.csv` / `.txt` o pegado directo de celdas desde Excel (Ctrl+V).
+    - Parseador inteligente tolerante a coma, punto y coma o tabulación, normalizador numérico de moneda y cantidades.
+    - Tabla de previsualización con semáforo interactivo (verde para altas nuevas, azul para actualizaciones de precio/stock, rojo para errores de formato).
+    - Botón de confirmación e importación masiva con reporte de resultados en tiempo real.
+  - Integración en `apps/web/src/CatalogoStock.tsx` con botón `[📥 Carga Masiva (Excel/CSV)]`.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero errores.
+  - Suite completa de **83 tests pasando al 100%** en PostgreSQL real con Testcontainers (`pnpm test`).
+  - Build de producción con Vite (`pnpm build`) exitoso.
+
+
 
 
 

@@ -920,3 +920,43 @@ export interface LoginResponse {
   usuario: UsuarioSesion;
 }
 
+// -------------------------------------------------------------
+// Fase 14: Carga Masiva desde Excel / CSV de Artículos y Precios
+// -------------------------------------------------------------
+
+export const itemImportacionProductoSchema = z.object({
+  codigo: z.string().trim().min(1, 'El código es obligatorio').max(100),
+  nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(255),
+  marca: z.string().trim().max(100).optional(),
+  rubroNombre: z.string().trim().max(100).optional(),
+  costoBase: montoNoNegativoSchema.default('0.00'),
+  precioMostradorSugerido: montoNoNegativoSchema.optional(),
+  precioGremioSugerido: montoNoNegativoSchema.optional(),
+  unidadPrincipal: z.string().trim().min(1).max(30).default('un'),
+  stockMinimo: cantidadDecimalSchema.default('0.000'),
+  stockActual: cantidadDecimalSchema.optional(),
+  codigoBarra: z.string().trim().max(100).optional(),
+});
+export type ItemImportacionProducto = z.infer<
+  typeof itemImportacionProductoSchema
+>;
+
+export const importarProductosMasivoSchema = z.object({
+  productos: z
+    .array(itemImportacionProductoSchema)
+    .min(1, 'Debe incluir al menos un producto')
+    .max(2000, 'Máximo 2000 productos por lote'),
+});
+export type ImportarProductosMasivoInput = z.infer<
+  typeof importarProductosMasivoSchema
+>;
+
+export interface ResultadoImportacionMasiva {
+  totalProcesados: number;
+  creados: number;
+  actualizados: number;
+  movimientosStockCreados: number;
+  rubrosCreados: number;
+}
+
+
