@@ -98,13 +98,6 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     };
   });
 
-  app.get('/health/ready', () => {
-    return {
-      status: 'ready',
-      timestamp: new Date().toISOString(),
-    };
-  });
-
   registerCajaRoutes(app, {
     pool,
     verifyToken: options.verifyToken,
