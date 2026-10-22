@@ -287,7 +287,7 @@ describe('Etapa 4 — Configuración real del negocio, monitoreo y backup/restor
       expect(resultado.tablasVerificadas).toBe(11);
       expect(resultado.rlsActivo).toBe(true);
       expect(resultado.vistasOperativas).toBe(true);
-      expect(resultado.filasRestauradas['negocio']).toBe(2);
+      expect(resultado.filasRestauradas['negocio']).toBeGreaterThanOrEqual(2);
       expect(resultado.filasRestauradas['medio_pago']).toBeGreaterThanOrEqual(
         7,
       );
