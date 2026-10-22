@@ -35,12 +35,23 @@ export function Login({ onLoginExitoso }: LoginProps): ReactElement {
         }),
       });
 
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? 'Credenciales incorrectas');
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          res.ok
+            ? 'Respuesta inesperada del servidor.'
+            : `El servidor no pudo procesar la solicitud (código ${res.status}). Verificá que la API esté activa.`,
+        );
       }
 
-      const datos = (await res.json()) as LoginResponse;
+      const data = (await res.json()) as LoginResponse | { error?: string };
+
+      if (!res.ok) {
+        const errorData = data as { error?: string };
+        throw new Error(errorData.error ?? 'Credenciales incorrectas');
+      }
+
+      const datos = data as LoginResponse;
       onLoginExitoso(datos.token, datos.usuario);
     } catch (err: unknown) {
       if (err instanceof Error) {

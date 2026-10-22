@@ -67,7 +67,7 @@ export function registerAuthRoutes(
       const client = await pool.connect();
       try {
         const res = await client.query<UsuarioAutenticadoRow>(
-          'select * from autenticar_usuario($1, $2)',
+          'select * from autenticar_usuario($1::text, $2::uuid)',
           [body.usuario, body.negocioId ?? null],
         );
 
