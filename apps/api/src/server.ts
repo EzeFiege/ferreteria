@@ -70,10 +70,6 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     if (request.method === 'OPTIONS') {
       return await reply.code(204).send();
     }
-    if (request.url.startsWith('/api/') || request.url === '/api') {
-      const stripped = request.url.replace(/^\/api(?=\/|\?|$)/, '') || '/';
-      request.raw.url = stripped;
-    }
   });
 
   app.addHook('onError', (request, reply, error, done) => {
@@ -98,65 +94,33 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     };
   });
 
-  registerCajaRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
+  // Registrador común para soportar llamadas con y sin prefijo /api
+  const registerDomainRoutes = (targetApp: FastifyInstance): void => {
+    registerCajaRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerReportesRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerConfiguracionRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerProductosRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerClientesRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerComprasRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerTesoreriaRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerFacturacionRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerContabilidadRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerPresupuestosRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerAuditoriaRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerAuthRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+  };
 
-  registerReportesRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
+  // 1. Registro directo en la raíz (ej: /auth/login, /contexto-mostrador)
+  registerDomainRoutes(app);
 
-  registerConfiguracionRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerProductosRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerClientesRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerComprasRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerTesoreriaRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerFacturacionRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerContabilidadRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerPresupuestosRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerAuditoriaRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
-
-  registerAuthRoutes(app, {
-    pool,
-    verifyToken: options.verifyToken,
-  });
+  // 2. Registro con prefijo /api (ej: /api/auth/login, /api/contexto-mostrador)
+  void app.register(
+    (apiSub, _opts, done) => {
+      registerDomainRoutes(apiSub);
+      done();
+    },
+    { prefix: '/api' },
+  );
 
   const webDistPath =
     process.env['WEB_DIST_PATH'] ??
