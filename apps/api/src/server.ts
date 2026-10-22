@@ -98,6 +98,13 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     };
   });
 
+  app.get('/health/ready', () => {
+    return {
+      status: 'ready',
+      timestamp: new Date().toISOString(),
+    };
+  });
+
   registerCajaRoutes(app, {
     pool,
     verifyToken: options.verifyToken,
@@ -174,6 +181,9 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     app.setNotFoundHandler((request, reply) => {
       const urlRaw = request.raw.url ?? request.url;
       const esRutaApi =
+        urlRaw.startsWith('/api') ||
+        urlRaw.startsWith('/auth') ||
+        urlRaw.startsWith('/auditoria') ||
         urlRaw.startsWith('/turnos') ||
         urlRaw.startsWith('/cajas') ||
         urlRaw.startsWith('/movimientos') ||
