@@ -12,6 +12,16 @@ import {
 export const negocio = pgTable('negocio', {
   id: uuid('id').primaryKey().defaultRandom(),
   nombre: text('nombre').notNull(),
+  razonSocial: text('razon_social'),
+  cuit: text('cuit'),
+  condicionIva: text('condicion_iva').notNull().default('responsable_inscripto'),
+  iibb: text('iibb'),
+  inicioActividades: date('inicio_actividades'),
+  domicilioComercial: text('domicilio_comercial'),
+  telefono: text('telefono'),
+  email: text('email'),
+  logoUrl: text('logo_url'),
+  leyendaTicket: text('leyenda_ticket'),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
 

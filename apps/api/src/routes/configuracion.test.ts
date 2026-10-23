@@ -295,4 +295,167 @@ describe('Etapa 4 — Configuración real del negocio, monitoreo y backup/restor
       await rm(tempBackupDir, { recursive: true, force: true });
     }
   });
+
+  it('permite consultar los datos comerciales de la empresa y actualizarlos solo con rol dueño', async () => {
+    // 1. Cajero puede consultar
+    const resGetCajero = await app.inject({
+      method: 'GET',
+      url: '/configuracion/empresa',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+    });
+    expect(resGetCajero.statusCode).toBe(200);
+    const bodyEmpresaInicial = resGetCajero.json<{ empresa: { id: string; nombre: string } }>();
+    expect(bodyEmpresaInicial.empresa.id).toBe(negocioA.negocioId);
+
+    // 2. Cajero intenta actualizar (403)
+    const resPutCajero = await app.inject({
+      method: 'PUT',
+      url: '/configuracion/empresa',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+      payload: {
+        nombre: 'Ferretería Hackeada',
+        condicionIva: 'monotributo',
+      },
+    });
+    expect(resPutCajero.statusCode).toBe(403);
+
+    // 3. Dueño actualiza con éxito
+    const resPutDueno = await app.inject({
+      method: 'PUT',
+      url: '/configuracion/empresa',
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Ferretería Central del Norte S.R.L.',
+        razonSocial: 'Ferretería Central S.R.L.',
+        cuit: '30-99887766-5',
+        condicionIva: 'responsable_inscripto',
+        iibb: '901-555666-1',
+        inicioActividades: '2020-01-15',
+        domicilioComercial: 'Calle 10 N° 500',
+        telefono: '0376-4445555',
+        email: 'info@ferreteriadelnorte.com',
+        leyendaTicket: 'Gracias por su compra.',
+      },
+    });
+    expect(resPutDueno.statusCode).toBe(200);
+    const bodyActualizado = resPutDueno.json<{
+      empresa: {
+        nombre: string;
+        cuit: string;
+        razonSocial: string;
+        condicionIva: string;
+      };
+    }>();
+    expect(bodyActualizado.empresa.nombre).toBe('Ferretería Central del Norte S.R.L.');
+    expect(bodyActualizado.empresa.cuit).toBe('30-99887766-5');
+    expect(bodyActualizado.empresa.condicionIva).toBe('responsable_inscripto');
+
+    // 4. Negocio B no ve los datos de Negocio A (RLS)
+    const resGetB = await app.inject({
+      method: 'GET',
+      url: '/configuracion/empresa',
+      headers: { authorization: `Bearer ${negocioB.tokenDueno}` },
+    });
+    expect(resGetB.statusCode).toBe(200);
+    expect(resGetB.json<{ empresa: { id: string } }>().empresa.id).toBe(negocioB.negocioId);
+    expect(resGetB.json<{ empresa: { cuit: string | null } }>().empresa.cuit).not.toBe('30-99887766-5');
+  });
+
+  it('administra usuarios: creación, listado, actualización y cambio de password con aislamiento multi-negocio', async () => {
+    // 1. Cajero no puede listar usuarios (403)
+    const resListCajero = await app.inject({
+      method: 'GET',
+      url: '/configuracion/usuarios',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+    });
+    expect(resListCajero.statusCode).toBe(403);
+
+    // 2. Encargado sí puede listar usuarios
+    const resListEncargado = await app.inject({
+      method: 'GET',
+      url: '/configuracion/usuarios',
+      headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+    });
+    expect(resListEncargado.statusCode).toBe(200);
+    const listaInicial = resListEncargado.json<{ usuarios: { id: string; email: string }[] }>();
+    expect(listaInicial.usuarios.length).toBeGreaterThanOrEqual(3);
+
+    // 3. Dueño crea un nuevo cajero
+    const emailNuevo = `nuevo-cajero-${randomUUID().slice(0, 6)}@ferreteria.local`;
+    const resCreate = await app.inject({
+      method: 'POST',
+      url: '/configuracion/usuarios',
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Cajero Suplente',
+        email: emailNuevo,
+        rol: 'cajero',
+        activo: true,
+        password: 'PasswordSegura123!',
+      },
+    });
+    expect(resCreate.statusCode).toBe(201);
+    const creado = resCreate.json<{ usuario: { id: string; nombre: string; email: string; rol: string } }>();
+    expect(creado.usuario.nombre).toBe('Cajero Suplente');
+    expect(creado.usuario.email).toBe(emailNuevo);
+    expect(creado.usuario.rol).toBe('cajero');
+
+    // 4. Intentar crear otro con el mismo email en Negocio A da 409
+    const resDup = await app.inject({
+      method: 'POST',
+      url: '/configuracion/usuarios',
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Cajero Clon',
+        email: emailNuevo,
+        rol: 'cajero',
+        activo: true,
+        password: 'PasswordSegura123!',
+      },
+    });
+    expect(resDup.statusCode).toBe(409);
+
+    // 5. Dueño actualiza datos del cajero suplente
+    const resUpdate = await app.inject({
+      method: 'PUT',
+      url: `/configuracion/usuarios/${creado.usuario.id}`,
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Cajero Titular Turno Tarde',
+        email: emailNuevo,
+        rol: 'encargado',
+        activo: true,
+      },
+    });
+    expect(resUpdate.statusCode).toBe(200);
+    expect(resUpdate.json<{ usuario: { nombre: string; rol: string } }>().usuario.nombre).toBe('Cajero Titular Turno Tarde');
+    expect(resUpdate.json<{ usuario: { rol: string } }>().usuario.rol).toBe('encargado');
+
+    // 6. Dueño restablece la contraseña del usuario
+    const resPass = await app.inject({
+      method: 'POST',
+      url: `/configuracion/usuarios/${creado.usuario.id}/password`,
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        password: 'NuevaPassword456!',
+      },
+    });
+    expect(resPass.statusCode).toBe(200);
+    expect(resPass.json<{ ok: boolean }>().ok).toBe(true);
+
+    // 7. Negocio B no ve ni puede modificar el usuario de Negocio A
+    const resCrossUpdate = await app.inject({
+      method: 'PUT',
+      url: `/configuracion/usuarios/${creado.usuario.id}`,
+      headers: { authorization: `Bearer ${negocioB.tokenDueno}` },
+      payload: {
+        nombre: 'Ataque Cruzado',
+        email: 'hack@cruzado.local',
+        rol: 'cajero',
+        activo: false,
+      },
+    });
+    expect(resCrossUpdate.statusCode).toBe(404);
+  });
+
 });

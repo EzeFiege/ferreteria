@@ -959,4 +959,99 @@ export interface ResultadoImportacionMasiva {
   rubrosCreados: number;
 }
 
+// -------------------------------------------------------------
+// Fase 15: Configuración de Empresa, Usuarios y Matriz de Roles
+// -------------------------------------------------------------
+
+export const guardarDatosEmpresaSchema = z.object({
+  nombre: z
+    .string()
+    .trim()
+    .min(1, 'El nombre comercial es obligatorio')
+    .max(150),
+  razonSocial: z.string().trim().max(200).optional().nullable(),
+  cuit: z.string().trim().max(30).optional().nullable(),
+  condicionIva: z
+    .enum(['responsable_inscripto', 'monotributo', 'exento', 'consumidor_final'])
+    .default('responsable_inscripto'),
+  iibb: z.string().trim().max(50).optional().nullable(),
+  inicioActividades: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato AAAA-MM-DD')
+    .optional()
+    .nullable(),
+  domicilioComercial: z.string().trim().max(300).optional().nullable(),
+  telefono: z.string().trim().max(50).optional().nullable(),
+  email: z
+    .string()
+    .trim()
+    .email('Email inválido')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  logoUrl: z.string().trim().max(100000).optional().nullable(),
+  leyendaTicket: z.string().trim().max(500).optional().nullable(),
+});
+export type GuardarDatosEmpresaInput = z.infer<
+  typeof guardarDatosEmpresaSchema
+>;
+
+export interface DatosEmpresaItem {
+  id: string;
+  nombre: string;
+  razonSocial: string | null;
+  cuit: string | null;
+  condicionIva: string;
+  iibb: string | null;
+  inicioActividades: string | null;
+  domicilioComercial: string | null;
+  telefono: string | null;
+  email: string | null;
+  logoUrl: string | null;
+  leyendaTicket: string | null;
+}
+
+export const guardarUsuarioAdminSchema = z.object({
+  id: uuidSchema.optional(),
+  nombre: z
+    .string()
+    .trim()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(100),
+  email: z.string().trim().email('Email inválido').max(120),
+  rol: rolUsuarioSchema,
+  activo: z.boolean().default(true),
+  password: z
+    .string()
+    .min(6, 'La contraseña debe tener al menos 6 caracteres')
+    .max(100)
+    .optional(),
+});
+export type GuardarUsuarioAdminInput = z.infer<
+  typeof guardarUsuarioAdminSchema
+>;
+
+export const cambiarPasswordAdminSchema = z.object({
+  password: z
+    .string()
+    .min(6, 'La contraseña debe tener al menos 6 caracteres')
+    .max(100),
+});
+export type CambiarPasswordAdminInput = z.infer<
+  typeof cambiarPasswordAdminSchema
+>;
+
+export interface UsuarioItemAdmin {
+  id: string;
+  negocioId: string;
+  proveedorUid: string;
+  nombre: string;
+  email: string | null;
+  rol: RolUsuario;
+  activo: boolean;
+  ultimoIngreso: string | null;
+  creadoEn: string;
+}
+
+
 

@@ -478,3 +478,41 @@ Estado:
 
 
 
+
+---
+
+## Fase 15 — Configuración Integral de Empresa, Branding, Gestión de Usuarios y Matriz de Roles (Completada ✅)
+
+Objetivo: dotar al sistema de una administración corporativa integral que permita configurar los datos comerciales y fiscales de la ferretería (Razón Social, CUIT, Condición de IVA, Ingresos Brutos, Inicio de Actividades, Domicilio Comercial, Teléfono, Email), branding con cargador de logo y leyenda de tickets con previsualización en vivo, junto a una gestión segura de usuarios (altas, bajas lógicas, asignación de roles y restablecimiento de contraseñas con hasheo criptográfico) y una matriz transparente de permisos.
+
+Estado:
+- [x] Migración SQL `db/migrations/014_configuracion_empresa.sql`:
+  - Ampliación de la tabla `negocio` con columnas comerciales, fiscales y de branding (`razon_social`, `cuit`, `condicion_iva`, `iibb`, `inicio_actividades`, `domicilio_comercial`, `telefono`, `email`, `logo_url`, `leyenda_ticket`).
+  - Activación y forzado de Row Level Security (RLS) en `negocio` con políticas diferenciadas para `SELECT`, `UPDATE` (aislado por `id = app.negocio_id`), `INSERT` y bloqueo estricto de `DELETE`.
+  - Concesión de privilegios `SELECT, INSERT, UPDATE` en `negocio` y `INSERT` en `usuario` para el rol de aplicación `app_user`.
+  - Sembrado de datos comerciales y leyenda de tickets para el negocio demo.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `guardarDatosEmpresaSchema`, `GuardarDatosEmpresaInput`, `DatosEmpresaItem`.
+  - `guardarUsuarioAdminSchema`, `GuardarUsuarioAdminInput`, `UsuarioItemAdmin`.
+  - `cambiarPasswordAdminSchema`, `CambiarPasswordAdminInput`.
+- [x] Backend API (`apps/api/src/routes/configuracion.ts`):
+  - `GET /configuracion/empresa`: lectura protegida de datos comerciales del negocio del token.
+  - `PUT /configuracion/empresa`: actualización atómica de datos comerciales y leyenda de tickets (rol exclusivo `dueno`).
+  - `GET /configuracion/usuarios`: listado de personal del negocio (roles `encargado`, `dueno`).
+  - `POST /configuracion/usuarios`: alta de usuario con hasheo criptográfico scrypt (`hashPassword`), control de unicidad de email por negocio y aislamiento tenant.
+  - `PUT /configuracion/usuarios/:id`: modificación de datos de personal y estado activo/inactivo (con protección contra auto-desactivación del propio dueño).
+  - `POST /configuracion/usuarios/:id/password`: restablecimiento directo de contraseña por el dueño.
+  - Actualización de `apps/api/src/db/migrate.test.ts` y 2 nuevos tests de integración en `apps/api/src/routes/configuracion.test.ts` pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Rediseño de `apps/web/src/ConfiguracionPiloto.tsx` en 5 pestañas organizadas:
+    1. 🏢 **Empresa & Branding**: formulario comercial completo, cargador dual de logo (URL o archivo de imagen local convertido a base64) y previsualizador en vivo con estilo de papel térmico.
+    2. 👥 **Gestión de Usuarios**: listado con chips de rol y estado, botón `+ Nuevo Usuario`, modales de edición y restablecimiento de contraseña.
+    3. 🛡️ **Matriz de Roles**: tabla comparativa de segregación de funciones entre Cajero, Encargado y Dueño.
+    4. 💳 **Medios de Pago & Catálogos**: medios de cobro con días de acreditación para flujo de caja proyectado, comisiones, rubros y categorías.
+    5. 📊 **Bitácora Piloto**: monitoreo de salud API/RLS y conciliación diaria contra planilla/cuaderno.
+  - Soporte de `leyendaTicket` personalizado en `apps/web/src/utils/impresion-ticket.ts`.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero errores.
+  - Suite completa de **85 tests pasando al 100%** (`pnpm test`).
+  - Compilación de producción (`pnpm build`) exitosa.

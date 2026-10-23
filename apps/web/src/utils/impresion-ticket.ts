@@ -187,7 +187,7 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
       <div class="divider"></div>
 
       <div class="text-center" style="font-size: 11px; margin-top: 8px;">
-        <div>¡Muchas gracias por su compra!</div>
+        <div></div>
         <div style="font-size: 10px; color: #555; margin-top: 4px;">
           Comprobante no fiscal - Ticket de control
         </div>

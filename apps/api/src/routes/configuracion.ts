@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
@@ -7,7 +8,11 @@ import {
   deCentavos,
   guardarCategoriaSchema,
   guardarMedioPagoSchema,
+  cambiarPasswordAdminSchema,
+  guardarDatosEmpresaSchema,
   guardarRubroSchema,
+  guardarUsuarioAdminSchema,
+  uuidSchema,
 } from '@ferreteria/shared';
 import {
   assertRoles,
@@ -16,6 +21,7 @@ import {
   type TokenVerifier,
 } from '../auth.js';
 import { withTenantTransaction } from '../db/context.js';
+import { hashPassword } from '../services/password.js';
 import { categoria, medioPago, rubro } from '../db/schema.js';
 
 export interface ConfiguracionRoutesOptions {
@@ -390,4 +396,509 @@ export function registerConfiguracionRoutes(
       return handleConfigError(err, request, reply);
     }
   });
+
+  // --------------------------------------------------------------------------
+  // Fase 15: Configuración de Empresa (Branding, Datos Fiscales y Tickets)
+  // --------------------------------------------------------------------------
+
+  app.get('/configuracion/empresa', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno', 'encargado', 'cajero']);
+
+      const empresa = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          const res = await client.query<{
+            id: string;
+            nombre: string;
+            razon_social: string | null;
+            cuit: string | null;
+            condicion_iva: string;
+            iibb: string | null;
+            inicio_actividades: string | null;
+            domicilio_comercial: string | null;
+            telefono: string | null;
+            email: string | null;
+            logo_url: string | null;
+            leyenda_ticket: string | null;
+          }>(
+            `
+            select id, nombre, razon_social, cuit, condicion_iva, iibb,
+                   to_char(inicio_actividades, 'YYYY-MM-DD') as inicio_actividades,
+                   domicilio_comercial, telefono, email, logo_url, leyenda_ticket
+            from negocio
+            where id = $1
+            `,
+            [claims.negocioId],
+          );
+
+          const fila = res.rows[0];
+          if (!fila) return null;
+
+          return {
+            id: fila.id,
+            nombre: fila.nombre,
+            razonSocial: fila.razon_social,
+            cuit: fila.cuit,
+            condicionIva: fila.condicion_iva,
+            iibb: fila.iibb,
+            inicioActividades: fila.inicio_actividades,
+            domicilioComercial: fila.domicilio_comercial,
+            telefono: fila.telefono,
+            email: fila.email,
+            logoUrl: fila.logo_url,
+            leyendaTicket: fila.leyenda_ticket,
+          };
+        },
+      );
+
+      if (!empresa) {
+        return await reply.code(404).send({ error: 'Negocio no encontrado' });
+      }
+
+      return await reply.code(200).send({ empresa });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
+  app.put('/configuracion/empresa', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno']);
+
+      const body = guardarDatosEmpresaSchema.parse(request.body);
+
+      const empresaActualizada = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          const res = await client.query<{
+            id: string;
+            nombre: string;
+            razon_social: string | null;
+            cuit: string | null;
+            condicion_iva: string;
+            iibb: string | null;
+            inicio_actividades: string | null;
+            domicilio_comercial: string | null;
+            telefono: string | null;
+            email: string | null;
+            logo_url: string | null;
+            leyenda_ticket: string | null;
+          }>(
+            `
+            update negocio
+            set nombre = $1,
+                razon_social = $2,
+                cuit = $3,
+                condicion_iva = $4,
+                iibb = $5,
+                inicio_actividades = $6,
+                domicilio_comercial = $7,
+                telefono = $8,
+                email = $9,
+                logo_url = $10,
+                leyenda_ticket = $11
+            where id = $12
+            returning id, nombre, razon_social, cuit, condicion_iva, iibb,
+                      to_char(inicio_actividades, 'YYYY-MM-DD') as inicio_actividades,
+                      domicilio_comercial, telefono, email, logo_url, leyenda_ticket
+            `,
+            [
+              body.nombre,
+              body.razonSocial ?? null,
+              body.cuit ?? null,
+              body.condicionIva,
+              body.iibb ?? null,
+              body.inicioActividades ? body.inicioActividades : null,
+              body.domicilioComercial ?? null,
+              body.telefono ?? null,
+              body.email ?? null,
+              body.logoUrl ?? null,
+              body.leyendaTicket ?? null,
+              claims.negocioId,
+            ],
+          );
+
+          const fila = res.rows[0];
+          if (!fila) return null;
+
+          return {
+            id: fila.id,
+            nombre: fila.nombre,
+            razonSocial: fila.razon_social,
+            cuit: fila.cuit,
+            condicionIva: fila.condicion_iva,
+            iibb: fila.iibb,
+            inicioActividades: fila.inicio_actividades,
+            domicilioComercial: fila.domicilio_comercial,
+            telefono: fila.telefono,
+            email: fila.email,
+            logoUrl: fila.logo_url,
+            leyendaTicket: fila.leyenda_ticket,
+          };
+        },
+      );
+
+      if (!empresaActualizada) {
+        return await reply.code(404).send({ error: 'Negocio no encontrado' });
+      }
+
+      request.log.info(
+        {
+          accion: 'actualizar_empresa',
+          usuarioId: claims.usuarioId,
+          negocioId: claims.negocioId,
+        },
+        'Datos de empresa actualizados por dueño',
+      );
+
+      return await reply.code(200).send({ empresa: empresaActualizada });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Fase 15: Gestión de Usuarios y Accesos
+  // --------------------------------------------------------------------------
+
+  app.get('/configuracion/usuarios', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno', 'encargado']);
+
+      const usuarios = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          const res = await client.query<{
+            id: string;
+            negocio_id: string;
+            proveedor_uid: string;
+            nombre: string;
+            email: string | null;
+            rol: 'dueno' | 'encargado' | 'cajero';
+            activo: boolean;
+            ultimo_ingreso: string | null;
+          }>(
+            `
+            select id, negocio_id, proveedor_uid, nombre, email, rol, activo,
+                   to_char(ultimo_ingreso, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ultimo_ingreso
+            from usuario
+            where negocio_id = $1
+            order by nombre asc
+            `,
+            [claims.negocioId],
+          );
+
+          return res.rows.map((r: {
+            id: string;
+            negocio_id: string;
+            proveedor_uid: string;
+            nombre: string;
+            email: string | null;
+            rol: 'dueno' | 'encargado' | 'cajero';
+            activo: boolean;
+            ultimo_ingreso: string | null;
+          }) => ({
+            id: r.id,
+            negocioId: r.negocio_id,
+            proveedorUid: r.proveedor_uid,
+            nombre: r.nombre,
+            email: r.email,
+            rol: r.rol,
+            activo: r.activo,
+            ultimoIngreso: r.ultimo_ingreso,
+          }));
+        },
+      );
+
+      return await reply.code(200).send({ usuarios });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
+  app.post('/configuracion/usuarios', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno']);
+
+      const body = guardarUsuarioAdminSchema.parse(request.body);
+
+      if (!body.password || body.password.trim().length === 0) {
+        return await reply.code(400).send({
+          error: 'La contraseña es obligatoria para nuevos usuarios',
+        });
+      }
+
+      const passHash = hashPassword(body.password);
+      const nuevoId = body.id ?? randomUUID();
+      const proveedorUid = `local:${body.email.toLowerCase()}`;
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          // Verificar email duplicado en el mismo negocio
+          const check = await client.query(
+            `select id from usuario where negocio_id = $1 and lower(email) = lower($2)`,
+            [claims.negocioId, body.email],
+          );
+          if (check.rowCount && check.rowCount > 0) {
+            return { duplicado: true as const };
+          }
+
+          const insertRes = await client.query<{
+            id: string;
+            negocio_id: string;
+            proveedor_uid: string;
+            nombre: string;
+            email: string | null;
+            rol: 'dueno' | 'encargado' | 'cajero';
+            activo: boolean;
+            ultimo_ingreso: string | null;
+          }>(
+            `
+            insert into usuario (id, negocio_id, proveedor_uid, nombre, email, rol, activo, password_hash)
+            values ($1, $2, $3, $4, $5, $6, $7, $8)
+            returning id, negocio_id, proveedor_uid, nombre, email, rol, activo,
+                      to_char(ultimo_ingreso, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ultimo_ingreso
+            `,
+            [
+              nuevoId,
+              claims.negocioId,
+              proveedorUid,
+              body.nombre,
+              body.email,
+              body.rol,
+              body.activo,
+              passHash,
+            ],
+          );
+
+          const r = insertRes.rows[0];
+          if (!r) {
+            throw new Error('No se pudo registrar el usuario');
+          }
+          return {
+            usuario: {
+              id: r.id,
+              negocioId: r.negocio_id,
+              proveedorUid: r.proveedor_uid,
+              nombre: r.nombre,
+              email: r.email,
+              rol: r.rol,
+              activo: r.activo,
+              ultimoIngreso: r.ultimo_ingreso,
+            },
+          };
+        },
+      );
+
+      if ('duplicado' in resultado) {
+        return await reply.code(409).send({
+          error: 'Ya existe un usuario registrado con ese correo electrónico',
+        });
+      }
+
+      request.log.info(
+        {
+          accion: 'crear_usuario',
+          usuarioCreadoId: resultado.usuario.id,
+          negocioId: claims.negocioId,
+          rol: resultado.usuario.rol,
+        },
+        'Usuario creado por dueño',
+      );
+
+      return await reply.code(201).send({ usuario: resultado.usuario });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
+  app.put('/configuracion/usuarios/:id', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno']);
+
+      const params = request.params as { id: string };
+      const usuarioId = uuidSchema.parse(params.id);
+      const body = guardarUsuarioAdminSchema.parse(request.body);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          // Si el usuario edita su propio usuario
+          if (claims.usuarioId === usuarioId) {
+            if (!body.activo) {
+              return { errorPropio: 'No podés desactivar tu propio usuario' };
+            }
+            if (body.rol !== 'dueno') {
+              return { errorPropio: 'No podés quitarte el rol de dueño a vos mismo' };
+            }
+          }
+
+          // Verificar email duplicado en otro usuario
+          const check = await client.query(
+            `select id from usuario where negocio_id = $1 and lower(email) = lower($2) and id <> $3`,
+            [claims.negocioId, body.email, usuarioId],
+          );
+          if (check.rowCount && check.rowCount > 0) {
+            return { duplicado: true as const };
+          }
+
+          let updateRes;
+          if (body.password && body.password.trim().length > 0) {
+            const passHash = hashPassword(body.password);
+            updateRes = await client.query<{
+              id: string;
+              negocio_id: string;
+              proveedor_uid: string;
+              nombre: string;
+              email: string | null;
+              rol: 'dueno' | 'encargado' | 'cajero';
+              activo: boolean;
+              ultimo_ingreso: string | null;
+            }>(
+              `
+              update usuario
+              set nombre = $1,
+                  email = $2,
+                  rol = $3,
+                  activo = $4,
+                  password_hash = $5
+              where id = $6 and negocio_id = $7
+              returning id, negocio_id, proveedor_uid, nombre, email, rol, activo,
+                        to_char(ultimo_ingreso, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ultimo_ingreso
+              `,
+              [body.nombre, body.email, body.rol, body.activo, passHash, usuarioId, claims.negocioId],
+            );
+          } else {
+            updateRes = await client.query<{
+              id: string;
+              negocio_id: string;
+              proveedor_uid: string;
+              nombre: string;
+              email: string | null;
+              rol: 'dueno' | 'encargado' | 'cajero';
+              activo: boolean;
+              ultimo_ingreso: string | null;
+            }>(
+              `
+              update usuario
+              set nombre = $1,
+                  email = $2,
+                  rol = $3,
+                  activo = $4
+              where id = $5 and negocio_id = $6
+              returning id, negocio_id, proveedor_uid, nombre, email, rol, activo,
+                        to_char(ultimo_ingreso, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as ultimo_ingreso
+              `,
+              [body.nombre, body.email, body.rol, body.activo, usuarioId, claims.negocioId],
+            );
+          }
+
+          const r = updateRes.rows[0];
+          if (!r) return null;
+
+          return {
+            usuario: {
+              id: r.id,
+              negocioId: r.negocio_id,
+              proveedorUid: r.proveedor_uid,
+              nombre: r.nombre,
+              email: r.email,
+              rol: r.rol,
+              activo: r.activo,
+              ultimoIngreso: r.ultimo_ingreso,
+            },
+          };
+        },
+      );
+
+      if (resultado === null) {
+        return await reply.code(404).send({ error: 'Usuario no encontrado' });
+      }
+      if ('errorPropio' in resultado) {
+        return await reply.code(400).send({ error: resultado.errorPropio });
+      }
+      if ('duplicado' in resultado) {
+        return await reply.code(409).send({
+          error: 'Ya existe otro usuario registrado con ese correo electrónico',
+        });
+      }
+
+      request.log.info(
+        {
+          accion: 'actualizar_usuario',
+          usuarioEditadoId: resultado.usuario.id,
+          negocioId: claims.negocioId,
+          rol: resultado.usuario.rol,
+        },
+        'Usuario modificado por dueño',
+      );
+
+      return await reply.code(200).send({ usuario: resultado.usuario });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
+  app.post('/configuracion/usuarios/:id/password', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno']);
+
+      const params = request.params as { id: string };
+      const usuarioId = uuidSchema.parse(params.id);
+      const body = cambiarPasswordAdminSchema.parse(request.body);
+
+      const passHash = hashPassword(body.password);
+
+      const actualizado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          const res = await client.query(
+            `
+            update usuario
+            set password_hash = $1
+            where id = $2 and negocio_id = $3
+            returning id
+            `,
+            [passHash, usuarioId, claims.negocioId],
+          );
+          return (res.rowCount ?? 0) > 0;
+        },
+      );
+
+      if (!actualizado) {
+        return await reply.code(404).send({ error: 'Usuario no encontrado' });
+      }
+
+      request.log.info(
+        {
+          accion: 'cambiar_password_usuario',
+          usuarioEditadoId: usuarioId,
+          negocioId: claims.negocioId,
+        },
+        'Contraseña de usuario restablecida por dueño',
+      );
+
+      return await reply.code(200).send({
+        ok: true,
+        mensaje: 'Contraseña actualizada correctamente',
+      });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
 }
