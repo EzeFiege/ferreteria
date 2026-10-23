@@ -1265,3 +1265,84 @@ export function evaluarDescuentoVolumen(params: {
     reglaNombre: mejorRegla.nombre,
   };
 }
+
+// -------------------------------------------------------------
+// Fase 17B: Sugerencia Inteligente de Reabastecimiento y Órdenes de Compra Automáticas
+// -------------------------------------------------------------
+
+export const nivelUrgenciaReabastecimientoSchema = z.enum([
+  'quiebre',
+  'critico',
+  'preventivo',
+  'normal',
+]);
+export type NivelUrgenciaReabastecimiento = z.infer<
+  typeof nivelUrgenciaReabastecimientoSchema
+>;
+
+export interface SugerenciaReabastecimientoItem {
+  productoId: string;
+  codigo: string;
+  nombre: string;
+  unidadPrincipal: string;
+  rubroNombre: string | null;
+  stockActual: string;
+  stockMinimo: string;
+  puntoPedido: string;
+  leadTimeDias: number;
+  costoBase: string;
+  unidadesVendidas30d: string;
+  consumoDiarioPromedio: string;
+  diasAutonomia: number;
+  puntoPedidoEfectivo: string;
+  cantidadSugerida: string;
+  proveedorId: string | null;
+  proveedorNombre: string | null;
+  costoCompraEstimado: string;
+  nivelUrgencia: NivelUrgenciaReabastecimiento;
+}
+
+export const itemGenerarOrdenReabastecimientoSchema = z.object({
+  productoId: uuidSchema,
+  cantidad: cantidadDecimalSchema,
+  costoUnitario: montoNoNegativoSchema,
+});
+export type ItemGenerarOrdenReabastecimientoInput = z.infer<
+  typeof itemGenerarOrdenReabastecimientoSchema
+>;
+
+export const ordenProveedorInputSchema = z.object({
+  proveedorId: uuidSchema,
+  condicionPago: z
+    .enum(['contado', 'cuenta_corriente'])
+    .default('cuenta_corriente'),
+  items: z
+    .array(itemGenerarOrdenReabastecimientoSchema)
+    .min(1, 'Debe incluir al menos un producto a pedir'),
+  notas: z.string().trim().max(500).optional(),
+});
+export type OrdenProveedorInput = z.infer<typeof ordenProveedorInputSchema>;
+
+export const generarOrdenesReabastecimientoSchema = z.object({
+  ordenes: z
+    .array(ordenProveedorInputSchema)
+    .min(1, 'Debe incluir al menos una orden de compra'),
+});
+export type GenerarOrdenesReabastecimientoInput = z.infer<
+  typeof generarOrdenesReabastecimientoSchema
+>;
+
+export interface OrdenCompraGeneradaInfo {
+  id: string;
+  numero: string;
+  proveedorId: string;
+  proveedorNombre: string;
+  total: string;
+  cantidadItems: number;
+}
+
+export interface GenerarOrdenesReabastecimientoResponse {
+  ok: boolean;
+  ordenesCreadas: OrdenCompraGeneradaInfo[];
+  mensaje: string;
+}

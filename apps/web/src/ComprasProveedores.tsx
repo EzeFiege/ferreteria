@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { formatearPesos } from './App.js';
 import { apiUrl } from './api-url.js';
+import { ReabastecimientoInteligente } from './ReabastecimientoInteligente.js';
 import type { CondicionIva, RolUsuario } from '@ferreteria/shared';
 
 export interface ProveedorItem {
@@ -75,7 +76,7 @@ export function ComprasProveedores({
   mediosPago,
   onPagoRegistrado,
 }: ComprasProveedoresProps): ReactElement {
-  const [seccion, setSeccion] = useState<'proveedores' | 'ordenes'>('proveedores');
+  const [seccion, setSeccion] = useState<'proveedores' | 'ordenes' | 'reabastecimiento'>('proveedores');
   const [proveedores, setProveedores] = useState<ProveedorItem[]>([]);
   const [ordenes, setOrdenes] = useState<OrdenCompraItem[]>([]);
   const [cargando, setCargando] = useState<boolean>(false);
@@ -414,6 +415,20 @@ export function ComprasProveedores({
             }`}
           >
             🏢 Directorio y Cuentas a Pagar
+          </button>
+          <button
+            type="button"
+            data-testid="tab-sub-reabastecimiento"
+            onClick={() => {
+              setSeccion('reabastecimiento');
+            }}
+            className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
+              seccion === 'reabastecimiento'
+                ? 'bg-emerald-600 text-white shadow'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            🤖 Reabastecimiento Inteligente
           </button>
           <button
             type="button"
@@ -811,6 +826,17 @@ export function ComprasProveedores({
             </table>
           </div>
         </div>
+      )}
+
+      {/* SECCIÓN 3: REABASTECIMIENTO INTELIGENTE */}
+      {seccion === 'reabastecimiento' && (
+        <ReabastecimientoInteligente
+          token={token}
+          rolActivo={rolUsuario}
+          onIrAOrdenes={() => {
+            setSeccion('ordenes');
+          }}
+        />
       )}
 
       {/* MODAL: PAGO A PROVEEDOR */}

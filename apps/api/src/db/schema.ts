@@ -212,6 +212,10 @@ export const producto = pgTable('producto', {
   stockMinimo: numeric('stock_minimo', { precision: 14, scale: 3 })
     .notNull()
     .default('0.000'),
+  puntoPedido: numeric('punto_pedido', { precision: 14, scale: 3 })
+    .notNull()
+    .default('0.000'),
+  leadTimeDias: integer('lead_time_dias').notNull().default(7),
   activo: boolean('activo').notNull().default(true),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });

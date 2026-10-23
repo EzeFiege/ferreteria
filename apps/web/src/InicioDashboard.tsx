@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { formatearPesos } from './App.js';
 
 export interface InicioDashboardProps {
@@ -55,6 +55,46 @@ export function InicioDashboard({
     (acc, v) => acc + parseFloat(v.total || '0'),
     0,
   );
+
+  const [alertasStock, setAlertasStock] = useState<{
+    totalQuiebre: number;
+    totalCritico: number;
+    totalPreventivo: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (modoSinConexion) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    fetch('/api/reabastecimiento/sugerencias', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return (await res.json()) as {
+          resumen?: {
+            quiebre: number;
+            critico: number;
+            preventivo: number;
+          };
+        };
+      })
+      .then((data) => {
+        if (data?.resumen) {
+          setAlertasStock({
+            totalQuiebre: data.resumen.quiebre,
+            totalCritico: data.resumen.critico,
+            totalPreventivo: data.resumen.preventivo,
+          });
+        }
+      })
+      .catch(() => {
+        // Ignorar error silenciosamente en tablero
+      });
+  }, [modoSinConexion]);
 
   const fechaHoy = new Date().toLocaleDateString('es-AR', {
     weekday: 'long',
@@ -164,6 +204,33 @@ export function InicioDashboard({
           <div className="mt-1 text-[11px] text-emerald-200/90">Saldo esperado para arqueo</div>
         </div>
       </section>
+
+      {/* Alerta de Reabastecimiento Inteligente */}
+      {alertasStock && (alertasStock.totalQuiebre > 0 || alertasStock.totalCritico > 0) && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl p-2 rounded-xl bg-amber-200/70">⚠️</span>
+            <div>
+              <div className="text-sm font-bold text-amber-900">
+                Alerta de Stock y Reabastecimiento
+              </div>
+              <div className="text-xs text-amber-800 mt-0.5">
+                Hay {alertasStock.totalQuiebre > 0 && <strong className="text-rose-700">{alertasStock.totalQuiebre} en quiebre</strong>}
+                {alertasStock.totalQuiebre > 0 && alertasStock.totalCritico > 0 && ' y '}
+                {alertasStock.totalCritico > 0 && <strong className="text-amber-800">{alertasStock.totalCritico} en nivel crítico</strong>}
+                {' '}que requieren emitir órdenes de compra.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { onNavegar('compras'); }}
+            className="self-start sm:self-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-sm"
+          >
+            Ver Sugerencias y Reponer →
+          </button>
+        </div>
+      )}
 
       {/* 3. Accesos Rápidos de Operación Táctica */}
       <div>
