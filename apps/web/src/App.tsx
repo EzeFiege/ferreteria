@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import {
   aCentavos,
   deCentavos,
+  evaluarDescuentoVolumen,
+  type ReglaDescuentoVolumenItem,
   type RolUsuario,
 } from '@ferreteria/shared';
 import {
@@ -52,6 +54,10 @@ export interface ItemCarrito {
   descuentoPct: string;
   descuentoMonto: string;
   subtotal: string;
+  reglaPromoNombre?: string | undefined;
+  descuentoVolumenAplicado?: boolean | undefined;
+  preciosPorLista?: Record<string, string> | undefined;
+  costoBase?: string | undefined;
 }
 
 export interface ListaPrecioItem {
@@ -322,6 +328,7 @@ export function App(): ReactElement {
     useState<boolean>(false);
 
   const [listasPrecios, setListasPrecios] = useState<ListaPrecioItem[]>([]);
+  const [reglasVolumen, setReglasVolumen] = useState<ReglaDescuentoVolumenItem[]>([]);
   const [listaPrecioIdSeleccionada, setListaPrecioIdSeleccionada] =
     useState<string>('');
   const [itemsCarrito, setItemsCarrito] = useState<ItemCarrito[]>([]);
@@ -516,6 +523,72 @@ export function App(): ReactElement {
       ? deCentavos(totalCarritoCentavos)
       : `${montoEnteroTeclado}.00`;
 
+  const cargarReglasVolumen = useCallback(async (token: string) => {
+    try {
+      const res = await fetch(apiUrl('/api/reglas-volumen'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as ReglaDescuentoVolumenItem[];
+        setReglasVolumen(data);
+      }
+    } catch {
+      // Ignora fallo offline
+    }
+  }, []);
+
+  const cambiarListaPrecioSeleccionada = useCallback(
+    (nuevaListaId: string) => {
+      setListaPrecioIdSeleccionada(nuevaListaId);
+      setItemsCarrito((prev) =>
+        prev.map((it) => {
+          let nuevoPrecioUnit = it.precioUnitario;
+          if (it.preciosPorLista && it.preciosPorLista[nuevaListaId]) {
+            const factor = parseFloat(it.factorConversion) || 1;
+            const precioPrincipal =
+              it.preciosPorLista[nuevaListaId] ?? it.precioUnitario;
+            if (it.unidad === 'secundaria' && factor > 0) {
+              const precioPrincCent = aCentavos(precioPrincipal);
+              const precioSecCent =
+                (precioPrincCent * 1000n) / BigInt(Math.round(factor * 1000));
+              nuevoPrecioUnit = deCentavos(precioSecCent);
+            } else {
+              nuevoPrecioUnit = precioPrincipal;
+            }
+          }
+          const cantNum = parseFloat(it.cantidad) || 0;
+          const promo = evaluarDescuentoVolumen({
+            productoId: it.productoId,
+            rubroId: it.rubroId,
+            listaPrecioId: nuevaListaId,
+            cantidad: cantNum,
+            reglas: reglasVolumen,
+          });
+          const descPct = promo
+            ? promo.descuentoPct
+            : it.descuentoVolumenAplicado
+              ? '0'
+              : it.descuentoPct;
+          const subtotalCent = calcularSubtotalCentavos(
+            nuevoPrecioUnit,
+            cantNum,
+            descPct,
+            it.descuentoMonto,
+          );
+          return {
+            ...it,
+            precioUnitario: nuevoPrecioUnit,
+            descuentoPct: descPct,
+            subtotal: deCentavos(subtotalCent),
+            reglaPromoNombre: promo ? promo.reglaNombre : undefined,
+            descuentoVolumenAplicado: Boolean(promo),
+          };
+        }),
+      );
+    },
+    [reglasVolumen],
+  );
+
   const cargarListasPrecios = useCallback(async (token: string) => {
     try {
       const res = await fetch(apiUrl('/api/listas-precios'), {
@@ -536,6 +609,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (operadorActivo?.token) {
       void cargarListasPrecios(operadorActivo.token);
+      void cargarReglasVolumen(operadorActivo.token);
     }
   }, [cargarListasPrecios, operadorActivo?.token]);
 
@@ -2177,7 +2251,7 @@ export function App(): ReactElement {
                           type="button"
                           data-testid={`btn-lista-precio-${lp.nombre.toLowerCase()}`}
                           onClick={() => {
-                            setListaPrecioIdSeleccionada(lp.id);
+                            cambiarListaPrecioSeleccionada(lp.id);
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                             activa

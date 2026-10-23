@@ -3,6 +3,7 @@ import {
   aCentavos,
   cantidadDecimalSchema,
   deCentavos,
+  evaluarDescuentoVolumen,
   montoDecimalSchema,
   registrarVentaSchema,
   rolUsuarioSchema,
@@ -60,5 +61,73 @@ describe('@ferreteria/shared schemas y aritmética de dinero', () => {
     expect(
       registrarVentaSchema.safeParse({ ...base, total: '999.00' }).success,
     ).toBe(false);
+  });
+
+  it('evalúa reglas de descuento por volumen correctamente con precedencia producto vs rubro', () => {
+    const reglas = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        nombre: 'Promo 10+ Tornillos',
+        productoId: '22222222-2222-4222-8222-222222222222',
+        productoCodigo: 'TOR-01',
+        productoNombre: 'Tornillo',
+        rubroId: null,
+        rubroNombre: null,
+        listaPrecioId: null,
+        listaPrecioNombre: null,
+        cantidadMinima: '10.000',
+        descuentoPct: '15.00',
+        activo: true,
+        creadoEn: new Date().toISOString(),
+      },
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        nombre: 'Promo Rubro Bulonería 50+',
+        productoId: null,
+        productoCodigo: null,
+        productoNombre: null,
+        rubroId: '44444444-4444-4444-8444-444444444444',
+        rubroNombre: 'Bulonería',
+        listaPrecioId: null,
+        listaPrecioNombre: null,
+        cantidadMinima: '50.000',
+        descuentoPct: '10.00',
+        activo: true,
+        creadoEn: new Date().toISOString(),
+      },
+    ];
+
+    // Caso 1: Cantidad insuficiente (5 unidades) -> sin descuento
+    const r1 = evaluarDescuentoVolumen({
+      productoId: '22222222-2222-4222-8222-222222222222',
+      rubroId: '44444444-4444-4444-8444-444444444444',
+      cantidad: 5,
+      reglas,
+    });
+    expect(r1).toBeNull();
+
+    // Caso 2: Cantidad cumple regla de producto (12 unidades) -> 15%
+    const r2 = evaluarDescuentoVolumen({
+      productoId: '22222222-2222-4222-8222-222222222222',
+      rubroId: '44444444-4444-4444-8444-444444444444',
+      cantidad: 12,
+      reglas,
+    });
+    expect(r2).toEqual({
+      descuentoPct: '15.00',
+      reglaNombre: 'Promo 10+ Tornillos',
+    });
+
+    // Caso 3: Otro producto del mismo rubro que cumple 60 unidades -> 10% por rubro
+    const r3 = evaluarDescuentoVolumen({
+      productoId: '99999999-9999-4999-8999-999999999999',
+      rubroId: '44444444-4444-4444-8444-444444444444',
+      cantidad: 60,
+      reglas,
+    });
+    expect(r3).toEqual({
+      descuentoPct: '10.00',
+      reglaNombre: 'Promo Rubro Bulonería 50+',
+    });
   });
 });

@@ -562,3 +562,45 @@ Estado:
   - `pnpm lint` con cero advertencias ni errores.
   - Suite completa de tests de integración en PostgreSQL real superada.
   - Compilación de producción (`pnpm build`) exitosa.
+
+---
+
+## Fase 17A — Listas de Precios Múltiples y Reglas de Descuento por Volumen (Completada ✅)
+
+Objetivo: dotar a la ferretería de una política de comercialización dinámica y flexible que permita crear listas de precios múltiples (Mostrador, Gremio, Mayorista, Distribuidor, Obras), sobreescribir precios fijos excepcionales por producto en listas específicas (sin depender exclusivamente del margen porcentual sobre el costo base) y configurar reglas de descuento y bonificación automáticas por cantidad/volumen (por artículo o rubro completo), recalculando precios y subtotales en tiempo real en caja y presupuestos.
+
+Estado:
+- [x] Migración SQL `db/migrations/016_listas_precios_y_descuentos_volumen.sql`:
+  - Creación de tabla `regla_descuento_volumen`: identificador, nombre de promoción, `producto_id`, `rubro_id`, `lista_precio_id`, `cantidad_minima`, `descuento_pct`, `activo`, `creado_en`.
+  - Creación de tabla `precio_producto_lista`: asignación manual de precio fijo por producto y lista de precios, con timestamp de actualización.
+  - Actualización de la vista `v_precios_producto`: resuelve con `coalesce(ppl.precio_fijo, round(p.costo_base * (1 + lp.margen_pct / 100), 2))` e informa `es_precio_fijo`.
+  - Índices de rendimiento, claves foráneas compuestas con `negocio_id` y aislamiento estricto por Row Level Security (RLS).
+  - Privilegios concedidos al rol de aplicación `app_user`.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `crearListaPrecioSchema`, `fijarPrecioProductoListaSchema`, `crearReglaVolumenSchema`, `actualizarReglaVolumenSchema`.
+  - Tipos TypeScript compartidos: `ReglaDescuentoVolumenItem`, `PrecioProductoListaItem`.
+  - Función de utilidad matemática pura `evaluarDescuentoVolumen(params)` con tests unitarios pasando al 100%.
+- [x] Backend API (`apps/api/src/routes/precios-reglas.ts`):
+  - `POST /listas-precios`: creación de nuevas listas de precios con validación de rol `dueno` y nombres únicos por negocio.
+  - `DELETE /listas-precios/:id`: baja de lista (con protección contra borrado de la lista base 'Mostrador').
+  - `POST /listas-precios/fijar-precio`: sobreescritura de precio fijo excepcional por producto.
+  - `DELETE /listas-precios/fijar-precio/:productoId/:listaPrecioId`: restablecimiento de precio dinámico por margen.
+  - `GET /reglas-volumen`: listado de reglas del negocio con nombres de producto y rubro asociados.
+  - `POST /reglas-volumen`: alta de regla por producto o rubro.
+  - `PUT /reglas-volumen/:id`: modificación, pausa o reactivación.
+  - `DELETE /reglas-volumen/:id`: eliminación de regla.
+  - Integración en `apps/api/src/server.ts` con rutas directas y prefijo `/api`.
+  - Suite de integración exhaustiva en `apps/api/src/routes/precios-reglas.test.ts` con 4 tests pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Componente `apps/web/src/GestionListasYReglas.tsx` integrado en `apps/web/src/ConfiguracionPiloto.tsx` bajo la pestaña `🏷️ Listas & Descuentos por Volumen`:
+    - Tab 1: Administración de listas de precios (creación, visualización de márgenes y eliminación).
+    - Tab 2: Gestor de reglas de descuento por volumen (por rubro o producto, cantidad mínima, % off, pausa/activación).
+    - Tab 3: Fijación manual de precios fijos por lista con buscador en vivo de artículos.
+  - Carrito de venta en mostrador (`apps/web/src/App.tsx`):
+    - Detección y aplicación inmediata de bonificaciones por cantidad con etiqueta visual `🏷️ {promo} (-{pct}%)`.
+    - Selector ágil de lista de precios que **recalcula automáticamente** los precios y subtotales de todos los ítems cargados en el carrito al alternar entre Mostrador, Gremio o Mayorista.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero advertencias ni errores.
+  - Suite completa de 95 tests pasando en PostgreSQL real.
+  - Compilación de producción (`pnpm build`) exitosa.

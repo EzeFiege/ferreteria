@@ -8,6 +8,7 @@ import {
 } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
+import { GestionListasYReglas } from './GestionListasYReglas.js';
 
 interface MedioPagoConfigItem {
   id: string;
@@ -64,7 +65,7 @@ export function ConfiguracionPiloto({
   onCatalogosActualizados,
 }: ConfiguracionPilotoProps): ReactElement {
   const [tabActiva, setTabActiva] = useState<
-    'empresa' | 'usuarios' | 'permisos' | 'catalogos' | 'bitacora'
+    'empresa' | 'usuarios' | 'permisos' | 'precios' | 'catalogos' | 'bitacora'
   >('empresa');
 
   // Catálogos
@@ -681,6 +682,17 @@ export function ConfiguracionPiloto({
             }`}
           >
             🛡️ Matriz de Roles
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTabActiva('precios'); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              tabActiva === 'precios'
+                ? 'bg-slate-900 text-white shadow'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            🏷️ Listas & Descuentos por Volumen
           </button>
           <button
             type="button"
@@ -1507,6 +1519,18 @@ export function ConfiguracionPiloto({
       )}
 
       {/* PESTAÑA 4: MEDIOS DE PAGO & CATÁLOGOS */}
+      {/* PESTAÑA: LISTAS DE PRECIOS Y REGLAS DE VOLUMEN */}
+      {tabActiva === 'precios' && (
+        <GestionListasYReglas
+          token={token}
+          rolActivo={rolActivo}
+          rubros={rubros}
+          onListasActualizadas={() => {
+            void onCatalogosActualizados();
+          }}
+        />
+      )}
+
       {tabActiva === 'catalogos' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

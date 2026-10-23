@@ -148,9 +148,9 @@ describe('Fase 16 — Control de Inventario Físico y Auditoría de Stock', () =
   }, 120_000);
 
   afterAll(async () => {
-    if (app) await app.close();
-    if (adminPool) await adminPool.end();
-    if (testDb) await testDb.cleanup();
+    await app.close();
+    await adminPool.end();
+    await testDb.cleanup();
   });
 
   it('inicia una toma de inventario físico congelando el stock del sistema y verificando roles', async () => {

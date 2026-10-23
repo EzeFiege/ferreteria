@@ -611,3 +611,27 @@ export const itemInventarioFisico = pgTable('item_inventario_fisico', {
   contadoEn: timestamp('contado_en', { withTimezone: true }),
   contadoPorNombre: text('contado_por_nombre'),
 });
+
+// Listas de Precios Múltiples y Reglas de Descuento por Volumen (Fase 17A)
+export const reglaDescuentoVolumen = pgTable('regla_descuento_volumen', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  nombre: text('nombre').notNull(),
+  productoId: uuid('producto_id'),
+  rubroId: uuid('rubro_id'),
+  listaPrecioId: uuid('lista_precio_id'),
+  cantidadMinima: numeric('cantidad_minima', { precision: 14, scale: 3 }).notNull(),
+  descuentoPct: numeric('descuento_pct', { precision: 5, scale: 2 }).notNull(),
+  activo: boolean('activo').notNull().default(true),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const precioProductoLista = pgTable('precio_producto_lista', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  listaPrecioId: uuid('lista_precio_id').notNull(),
+  precioFijo: numeric('precio_fijo', { precision: 14, scale: 2 }).notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});

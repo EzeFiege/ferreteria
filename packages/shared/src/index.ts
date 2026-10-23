@@ -1131,3 +1131,137 @@ export interface DetalleInventarioFisico {
   inventario: InventarioFisicoItem;
   items: ItemInventarioDetalle[];
 }
+
+// -------------------------------------------------------------
+// Fase 17A: Listas de Precios Múltiples y Reglas de Descuento por Volumen
+// -------------------------------------------------------------
+
+export const crearListaPrecioSchema = z.object({
+  nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(100),
+  margenPct: comisionPctSchema,
+  orden: z.number().int().min(1).max(100).optional().default(1),
+  activo: z.boolean().optional().default(true),
+});
+export type CrearListaPrecioInput = z.infer<typeof crearListaPrecioSchema>;
+
+export const fijarPrecioProductoListaSchema = z.object({
+  productoId: uuidSchema,
+  listaPrecioId: uuidSchema,
+  precioFijo: montoNoNegativoSchema,
+});
+export type FijarPrecioProductoListaInput = z.infer<
+  typeof fijarPrecioProductoListaSchema
+>;
+
+export const crearReglaVolumenSchema = z
+  .object({
+    nombre: z
+      .string()
+      .trim()
+      .min(1, 'El nombre de la regla es obligatorio')
+      .max(150),
+    productoId: uuidSchema.optional().nullable(),
+    rubroId: uuidSchema.optional().nullable(),
+    listaPrecioId: uuidSchema.optional().nullable(),
+    cantidadMinima: cantidadDecimalSchema,
+    descuentoPct: comisionPctSchema,
+    activo: z.boolean().optional().default(true),
+  })
+  .refine((data) => Boolean(data.productoId || data.rubroId), {
+    message:
+      'Debe especificar al menos un producto o un rubro para la regla de volumen',
+    path: ['productoId'],
+  });
+export type CrearReglaVolumenInput = z.infer<typeof crearReglaVolumenSchema>;
+
+export const actualizarReglaVolumenSchema = z.object({
+  nombre: z.string().trim().min(1).max(150).optional(),
+  productoId: uuidSchema.optional().nullable(),
+  rubroId: uuidSchema.optional().nullable(),
+  listaPrecioId: uuidSchema.optional().nullable(),
+  cantidadMinima: cantidadDecimalSchema.optional(),
+  descuentoPct: comisionPctSchema.optional(),
+  activo: z.boolean().optional(),
+});
+export type ActualizarReglaVolumenInput = z.infer<
+  typeof actualizarReglaVolumenSchema
+>;
+
+export interface ReglaDescuentoVolumenItem {
+  id: string;
+  nombre: string;
+  productoId: string | null;
+  productoCodigo: string | null;
+  productoNombre: string | null;
+  rubroId: string | null;
+  rubroNombre: string | null;
+  listaPrecioId: string | null;
+  listaPrecioNombre: string | null;
+  cantidadMinima: string;
+  descuentoPct: string;
+  activo: boolean;
+  creadoEn: string;
+}
+
+export interface PrecioProductoListaItem {
+  id: string;
+  productoId: string;
+  listaPrecioId: string;
+  precioFijo: string;
+  creadoEn: string;
+  actualizadoEn: string;
+}
+
+/**
+ * Evalúa las reglas de volumen aplicables a un ítem según producto, rubro, lista de precio y cantidad.
+ * Retorna la regla con mayor porcentaje de descuento si cumple la cantidad mínima.
+ */
+export function evaluarDescuentoVolumen(params: {
+  productoId?: string | undefined;
+  rubroId?: string | undefined;
+  listaPrecioId?: string | undefined;
+  cantidad: number;
+  reglas: ReglaDescuentoVolumenItem[];
+}): { descuentoPct: string; reglaNombre: string } | null {
+  const { productoId, rubroId, listaPrecioId, cantidad, reglas } = params;
+  if (reglas.length === 0 || cantidad <= 0) return null;
+
+  let mejorRegla: ReglaDescuentoVolumenItem | null = null;
+  let mejorDescuentoNum = 0;
+
+  for (const r of reglas) {
+    if (!r.activo) continue;
+
+    // Si la regla restringe a una lista de precio específica y no coincide, saltar
+    if (r.listaPrecioId && listaPrecioId && r.listaPrecioId !== listaPrecioId) {
+      continue;
+    }
+
+    // Coincidencia por producto específico
+    const coincideProducto = Boolean(productoId && r.productoId === productoId);
+    // Coincidencia por rubro (si la regla no tiene producto específico)
+    const coincideRubro = Boolean(!r.productoId && rubroId && r.rubroId === rubroId);
+
+    if (!coincideProducto && !coincideRubro) continue;
+
+    const cantMinima = parseFloat(r.cantidadMinima);
+    if (cantidad >= cantMinima) {
+      const descPct = parseFloat(r.descuentoPct);
+      // Prioridad 1: Coincidencia por producto tiene prioridad sobre rubro general
+      // Prioridad 2: Mayor porcentaje de descuento
+      const esMejorEspecificidad =
+        coincideProducto && mejorRegla && !mejorRegla.productoId;
+      if (descPct > mejorDescuentoNum || esMejorEspecificidad) {
+        mejorDescuentoNum = descPct;
+        mejorRegla = r;
+      }
+    }
+  }
+
+  if (!mejorRegla || mejorDescuentoNum <= 0) return null;
+
+  return {
+    descuentoPct: mejorRegla.descuentoPct,
+    reglaNombre: mejorRegla.nombre,
+  };
+}
