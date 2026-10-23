@@ -516,3 +516,49 @@ Estado:
   - `pnpm lint` con cero errores.
   - Suite completa de **85 tests pasando al 100%** (`pnpm test`).
   - Compilación de producción (`pnpm build`) exitosa.
+
+---
+
+## Fase 16 — Control de Inventario Físico, Recuentos Ciegos y Conciliación en Kardex (Completada ✅)
+
+Objetivo: proveer una solución integral y profesional de auditoría de existencias físicas para la ferretería que permita realizar tomas de inventario generales o por rubro, habilitar recuentos ciegos (sin que el operador vea las cantidades del sistema) para evitar sesgos, detectar diferencias cuantitativas y monetarias en tiempo real con semáforo visual, y conciliar el stock en un solo clic impactando de forma inmutable en el Kardex (`movimiento_stock`) con asientos contables automáticos por variación patrimonial (mermas o sobrantes).
+
+Estado:
+- [x] Migración SQL `db/migrations/015_inventario_fisico.sql`:
+  - Creación de tabla `inventario_fisico`: identificador, número secuencial por negocio, nombre/motivo, alcance (`general` o `rubro`), `rubro_id`, estado (`borrador`, `en_progreso`, `conciliado`, `cancelado`), modo de conteo (`ciego` o `revelado`), fechas de apertura y cierre, usuario responsable y totales valorizados de faltantes y sobrantes.
+  - Creación de tabla `item_inventario_fisico`: snapshot de `stock_sistema` a la fecha de inicio, `stock_contado`, `diferencia`, costo unitario ponderado, diferencia valorizada, timestamp de conteo y operario que realizó el conteo.
+  - Claves foráneas compuestas `(id, negocio_id)` y `(producto_id, negocio_id)`.
+  - Activación y forzado estricto de Row Level Security (RLS) en ambas tablas.
+  - Concesión de privilegios `SELECT, INSERT, UPDATE` al rol de aplicación `app_user`.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `iniciarInventarioSchema`, `itemConteoInputSchema`, `guardarConteosInventarioSchema`, `aplicarInventarioSchema`.
+  - Tipos TypeScript compartidos: `InventarioFisicoItem`, `ItemInventarioDetalle`, `DetalleInventarioFisico`.
+- [x] Backend API (`apps/api/src/routes/inventario.ts`):
+  - `GET /inventarios`: historial ordenado de inventarios físicos con contadores de ítems y estado.
+  - `POST /inventarios/iniciar`: snapshot atómico de stock del sistema actual para todos los artículos activos (o filtrados por rubro) con costo de reposición.
+  - `GET /inventarios/:id`: detalle completo del inventario con sus ítems, diferencias calculadas y datos del producto.
+  - `PUT /inventarios/:id/conteos`: guardado progresivo de recuentos físicos por lote con recálculo en vivo de diferencias.
+  - `POST /inventarios/:id/aplicar`: conciliación atómica y definitiva:
+    - Genera movimientos inmutables de Kardex en `movimiento_stock` con tipos `ajuste_sobrante` (in) o `ajuste_faltante` (out).
+    - Asiento contable automático con `registrarAsientoAutomatico` reflejando la pérdida neta (Débito a Mermas / Crédito a Mercaderías) o ganancia neta (Débito a Mercaderías / Crédito a Otros Ingresos).
+    - Transición de estado a `conciliado` con sellado de totales.
+  - `POST /inventarios/:id/cancelar`: anulación de inventarios en borrador sin impacto en Kardex.
+  - Integración en `apps/api/src/server.ts` bajo rutas duales (`/api/inventarios` y `/inventarios`) y soporte SPA.
+  - Actualización de `apps/api/src/db/migrate.test.ts`.
+  - Suite de integración exhaustiva en `apps/api/src/routes/inventario.test.ts` con 5 tests pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Componente completo `apps/web/src/InventarioFisico.tsx`:
+    - Tablero con directorio de inventarios y filtros por estado.
+    - Modal para iniciar nuevo inventario (alcance general o por rubro, modo ciego vs revelado).
+    - Modo recuento ciego donde el conteo del sistema permanece oculto para máxima rigurosidad en pasillo/góndola.
+    - Captura rápida de conteos físicos por teclado, con guardado automático.
+    - Semáforo visual de diferencias: verde (coincidencia exacta), rojo (faltante / pérdida), azul (sobrante).
+    - Métricas valorizadas en vivo: unidades faltantes, unidades sobrantes, impacto monetario neto y costo total auditado.
+    - Botón de conciliación definitiva con modal de confirmación y advertencia de impacto irreversible en Kardex.
+    - Exportación a planilla Excel / CSV con encabezados estructurados y BOM UTF-8.
+  - Integración en la navegación lateral de `apps/web/src/App.tsx` en el bloque *Stock & Clientes*.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero advertencias ni errores.
+  - Suite completa de tests de integración en PostgreSQL real superada.
+  - Compilación de producción (`pnpm build`) exitosa.

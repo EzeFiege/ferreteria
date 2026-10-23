@@ -14,6 +14,7 @@ import { apiUrl } from './api-url.js';
 import { ConfiguracionPiloto } from './ConfiguracionPiloto.js';
 import { ReportesHistorial } from './ReportesHistorial.js';
 import { CatalogoStock } from './CatalogoStock.js';
+import { InventarioFisico } from './InventarioFisico.js';
 import {
   ClientesCtaCte,
   type ClienteItem,
@@ -292,6 +293,7 @@ export function App(): ReactElement {
     | 'reportes'
     | 'configuracion'
     | 'catalogo'
+    | 'inventario'
     | 'clientes'
     | 'compras'
     | 'tesoreria'
@@ -1476,6 +1478,23 @@ export function App(): ReactElement {
 
               <button
                 type="button"
+                data-testid="tab-inventario"
+                onClick={() => {
+                  setPestana('inventario');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'inventario'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">📋</span>
+                <span>Inventario Físico</span>
+              </button>
+
+              <button
+                type="button"
                 data-testid="tab-clientes"
                 onClick={() => {
                   setPestana('clientes');
@@ -1997,6 +2016,14 @@ export function App(): ReactElement {
                 void cargarResumenTurno(turnoId, operadorActivo.token);
               }
             }}
+          />
+        )}
+
+        {pestana === 'inventario' && (
+          <InventarioFisico
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            rubros={contexto.rubros}
           />
         )}
 

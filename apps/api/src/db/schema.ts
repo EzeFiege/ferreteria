@@ -559,3 +559,55 @@ export const itemPresupuesto = pgTable('item_presupuesto', {
   notas: text('notas'),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Control de Inventario Físico y Auditoría de Stock (Fase 16)
+export const inventarioFisico = pgTable('inventario_fisico', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: integer('numero').notNull(),
+  nombre: text('nombre').notNull(),
+  rubroId: uuid('rubro_id'),
+  estado: text('estado')
+    .$type<'en_proceso' | 'aplicado' | 'cancelado'>()
+    .notNull()
+    .default('en_proceso'),
+  totalArticulos: integer('total_articulos').notNull().default(0),
+  articulosConDiferencia: integer('articulos_con_diferencia').notNull().default(0),
+  diferenciaNetaValorizada: numeric('diferencia_neta_valorizada', {
+    precision: 14,
+    scale: 2,
+  })
+    .notNull()
+    .default('0.00'),
+  observaciones: text('observaciones'),
+  iniciadoPorUsuarioId: text('iniciado_por_usuario_id').notNull(),
+  iniciadoPorNombre: text('iniciado_por_nombre').notNull(),
+  aplicadoPorUsuarioId: text('aplicado_por_usuario_id'),
+  aplicadoPorNombre: text('aplicado_por_nombre'),
+  asientoId: uuid('asiento_id'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  aplicadoEn: timestamp('aplicado_en', { withTimezone: true }),
+});
+
+export const itemInventarioFisico = pgTable('item_inventario_fisico', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  inventarioId: uuid('inventario_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  stockSistema: numeric('stock_sistema', { precision: 14, scale: 3 }).notNull(),
+  stockContado: numeric('stock_contado', { precision: 14, scale: 3 }),
+  diferencia: numeric('diferencia', { precision: 14, scale: 3 })
+    .notNull()
+    .default('0.000'),
+  costoUnitario: numeric('costo_unitario', { precision: 14, scale: 2 })
+    .notNull()
+    .default('0.00'),
+  diferenciaValorizada: numeric('diferencia_valorizada', {
+    precision: 14,
+    scale: 2,
+  })
+    .notNull()
+    .default('0.00'),
+  contadoEn: timestamp('contado_en', { withTimezone: true }),
+  contadoPorNombre: text('contado_por_nombre'),
+});

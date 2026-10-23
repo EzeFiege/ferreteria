@@ -26,6 +26,7 @@ export interface InicioDashboardProps {
       | 'reportes'
       | 'configuracion'
       | 'catalogo'
+      | 'inventario'
       | 'clientes'
       | 'compras'
       | 'tesoreria'

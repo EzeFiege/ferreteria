@@ -1053,5 +1053,81 @@ export interface UsuarioItemAdmin {
   creadoEn: string;
 }
 
+// -------------------------------------------------------------
+// Fase 16: Control de Inventario Físico y Auditoría de Stock
+// -------------------------------------------------------------
 
+export const estadoInventarioSchema = z.enum([
+  'en_proceso',
+  'aplicado',
+  'cancelado',
+]);
+export type EstadoInventario = z.infer<typeof estadoInventarioSchema>;
 
+export const iniciarInventarioSchema = z.object({
+  nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(150),
+  rubroId: uuidSchema.optional().nullable(),
+  observaciones: z.string().trim().max(500).optional().nullable(),
+});
+export type IniciarInventarioInput = z.infer<typeof iniciarInventarioSchema>;
+
+export const itemConteoInputSchema = z.object({
+  productoId: uuidSchema,
+  stockContado: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,3})?$/, 'Cantidad válida (hasta 3 decimales)'),
+  contadoPorNombre: z.string().trim().max(100).optional(),
+});
+export type ItemConteoInput = z.infer<typeof itemConteoInputSchema>;
+
+export const guardarConteosInventarioSchema = z.object({
+  items: z.array(itemConteoInputSchema).min(1, 'Debe incluir al menos un ítem contado'),
+});
+export type GuardarConteosInventarioInput = z.infer<
+  typeof guardarConteosInventarioSchema
+>;
+
+export const aplicarInventarioSchema = z.object({
+  observaciones: z.string().trim().max(500).optional(),
+});
+export type AplicarInventarioInput = z.infer<typeof aplicarInventarioSchema>;
+
+export interface InventarioFisicoItem {
+  id: string;
+  numero: number;
+  nombre: string;
+  rubroId: string | null;
+  rubroNombre: string | null;
+  estado: EstadoInventario;
+  totalArticulos: number;
+  articulosConDiferencia: number;
+  diferenciaNetaValorizada: string;
+  observaciones: string | null;
+  iniciadoPorNombre: string;
+  aplicadoPorNombre: string | null;
+  creadoEn: string;
+  aplicadoEn: string | null;
+}
+
+export interface ItemInventarioDetalle {
+  id: string;
+  inventarioId: string;
+  productoId: string;
+  productoCodigo: string;
+  productoNombre: string;
+  rubroNombre: string | null;
+  unidadPrincipal: string;
+  stockSistema: string;
+  stockContado: string | null;
+  diferencia: string;
+  costoUnitario: string;
+  diferenciaValorizada: string;
+  contadoEn: string | null;
+  contadoPorNombre: string | null;
+}
+
+export interface DetalleInventarioFisico {
+  inventario: InventarioFisicoItem;
+  items: ItemInventarioDetalle[];
+}

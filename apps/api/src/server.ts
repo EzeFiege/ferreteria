@@ -17,6 +17,7 @@ import { registerContabilidadRoutes } from './routes/contabilidad.js';
 import { registerPresupuestosRoutes } from './routes/presupuestos.js';
 import { registerAuditoriaRoutes } from './routes/auditoria.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerInventarioRoutes } from './routes/inventario.js';
 
 const { Pool } = pg;
 
@@ -108,6 +109,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     registerPresupuestosRoutes(targetApp, { pool, verifyToken: options.verifyToken });
     registerAuditoriaRoutes(targetApp, { pool, verifyToken: options.verifyToken });
     registerAuthRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerInventarioRoutes(targetApp, { pool, verifyToken: options.verifyToken });
   };
 
   // 1. Registro directo en la raíz (ej: /auth/login, /contexto-mostrador)
@@ -157,6 +159,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         urlRaw.startsWith('/stock') ||
         urlRaw.startsWith('/reportes') ||
         urlRaw.startsWith('/configuracion') ||
+        urlRaw.startsWith('/inventarios') ||
         urlRaw.startsWith('/contexto-mostrador') ||
         urlRaw.startsWith('/health');
 
