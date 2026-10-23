@@ -602,5 +602,43 @@ Estado:
 - [x] Verificación de calidad:
   - `pnpm typecheck` superado sin errores en todos los workspaces.
   - `pnpm lint` con cero advertencias ni errores.
-  - Suite completa de 95 tests pasando en PostgreSQL real.
+  - `pnpm test` superado al 100%.
+  - Compilación de producción (`pnpm build`) exitosa.
+
+---
+
+## Fase 17B — Sugerencia Inteligente de Reabastecimiento y Órdenes de Compra Automáticas (Completada ✅)
+
+Objetivo: optimizar el capital de trabajo de la ferretería calculando la rotación real de stock (consumo promedio diario en los últimos 30 días), proyectando días de autonomía hasta el quiebre de stock y sugiriendo reposiciones automáticas agrupadas por proveedor habitual para generar borradores de órdenes de compra correlativas (`OC-XXXX`) en un solo clic.
+
+Estado:
+- [x] Migración SQL `db/migrations/017_reabastecimiento_inteligente.sql`:
+  - Adición de campos logísticos en tabla `producto`: `punto_pedido` (`numeric(14,3)`) y `lead_time_dias` (`integer`).
+  - Creación de vista analítica `v_articulos_reabastecimiento`:
+    - Métricas de rotación: unidades vendidas en los últimos 30 días y consumo promedio diario ($Ventas30d / 30.0$).
+    - Punto de pedido dinámico: $\max(PuntoPedidoManual, StockMinimo + ConsumoDiario \times LeadTime)$.
+    - Proyección de autonomía: cálculo en días de stock restante hasta el quiebre.
+    - Clasificación de nivel de urgencia: `quiebre`, `critico`, `preventivo`, `normal`.
+    - Cantidad sugerida de compra y costo unitario estimado.
+  - Permisos concedidos a `app_user` e integración en `apps/api/src/db/migrate.test.ts`.
+- [x] Esquemas compartidos en `packages/shared`:
+  - Tipos `SugerenciaReabastecimientoItem`, `ResumenReabastecimiento`.
+  - Esquema Zod `generarOrdenesReabastecimientoSchema` con validación estricta de ítems, cantidades y condiciones de pago.
+- [x] Backend API (`apps/api/src/routes/reabastecimiento.ts`):
+  - `GET /reabastecimiento/sugerencias`: consulta analítica con filtros por urgencia (`quiebre`, `critico`, `preventivo`), proveedor y rubro.
+  - `POST /reabastecimiento/generar-ordenes`: generación atómica de órdenes de compra correlativas en estado `borrador` agrupadas por proveedor con sus respectivos renglones en `item_orden_compra`.
+  - Integración en `apps/api/src/server.ts` con rutas directas y prefijo `/api`.
+  - Suite de integración en `apps/api/src/routes/reabastecimiento.test.ts` con 3 tests pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Componente `apps/web/src/ReabastecimientoInteligente.tsx`:
+    - Tarjetas KPI con recuento de artículos en quiebre, stock crítico y nivel preventivo.
+    - Filtros por nivel de urgencia, búsqueda por texto y selector de proveedor.
+    - Tabla interactiva con selección múltiple mediante casillas de verificación, cálculo de subtotales e inputs de cantidad editable.
+    - Generación agrupada de borradores de órdenes de compra con modal de confirmación y redirección inmediata a la pestaña de órdenes.
+  - Subpestaña `🤖 Reabastecimiento Inteligente` integrada en `apps/web/src/ComprasProveedores.tsx`.
+  - Alerta visual de stock en `apps/web/src/InicioDashboard.tsx` para avisar al cajero/encargado cuando existen artículos en quiebre o nivel crítico.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con 0 advertencias y 0 errores.
+  - Suite completa de integración: 18 archivos de prueba, 98 tests pasando al 100%.
   - Compilación de producción (`pnpm build`) exitosa.
