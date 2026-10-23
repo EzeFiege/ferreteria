@@ -33,6 +33,7 @@ export interface BuildServerOptions {
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: options.logger ?? true,
+    bodyLimit: 15 * 1024 * 1024, // 15 MiB para permitir carga de logos base64, comprobantes y backups
   });
 
   const ownsPool = options.pool === undefined;

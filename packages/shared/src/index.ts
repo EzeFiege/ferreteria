@@ -989,7 +989,7 @@ export const guardarDatosEmpresaSchema = z.object({
     .optional()
     .nullable()
     .or(z.literal('')),
-  logoUrl: z.string().trim().max(100000).optional().nullable(),
+  logoUrl: z.string().trim().max(15_000_000).optional().nullable(),
   leyendaTicket: z.string().trim().max(500).optional().nullable(),
 });
 export type GuardarDatosEmpresaInput = z.infer<

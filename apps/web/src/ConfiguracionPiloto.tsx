@@ -293,25 +293,67 @@ export function ConfiguracionPiloto({
     }
   };
 
-  // Cargar imagen de logo local
+  // Cargar imagen de logo local con compresión y redimensionado inteligente
   const procesarLogoLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setErrorMsg('El archivo seleccionado debe ser una imagen (PNG, JPG, SVG).');
+      setErrorMsg('El archivo seleccionado debe ser una imagen (PNG, JPG, SVG, WebP).');
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setErrorMsg('La imagen no debe superar los 2 MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMsg('La imagen no debe superar los 10 MB.');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setLogoUrl(base64);
+      const result = event.target?.result as string;
+      if (!result) return;
+
+      // Si es SVG, guardarlo directamente como vector
+      if (file.type.includes('svg')) {
+        setLogoUrl(result);
+        return;
+      }
+
+      // Para imágenes bitmap (PNG, JPEG, WebP), optimizar y redimensionar vía Canvas
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 600;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          setLogoUrl(result);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        // Usar image/png para preservar transparencia
+        const optimizedBase64 = canvas.toDataURL('image/png');
+        setLogoUrl(optimizedBase64);
+      };
+      img.onerror = () => {
+        setLogoUrl(result);
+      };
+      img.src = result;
     };
     reader.readAsDataURL(file);
   };

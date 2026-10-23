@@ -464,7 +464,10 @@ export function registerConfiguracionRoutes(
     }
   });
 
-  app.put('/configuracion/empresa', async (request, reply) => {
+  app.put(
+    '/configuracion/empresa',
+    { bodyLimit: 15 * 1024 * 1024 },
+    async (request, reply) => {
     try {
       const claims = await authenticateRequest(request, verifyToken);
       assertRoles(claims, ['dueno']);

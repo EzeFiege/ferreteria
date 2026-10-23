@@ -350,7 +350,21 @@ describe('Etapa 4 — Configuración real del negocio, monitoreo y backup/restor
     expect(bodyActualizado.empresa.cuit).toBe('30-99887766-5');
     expect(bodyActualizado.empresa.condicionIva).toBe('responsable_inscripto');
 
-    // 4. Negocio B no ve los datos de Negocio A (RLS)
+    // 4. Acepta logo en base64 de más de 1.2 MB sin arrojar error 413 (Payload Too Large)
+    const logoGrande = `data:image/png;base64,${'A'.repeat(1_300_000)}`;
+    const resPutLogoGrande = await app.inject({
+      method: 'PUT',
+      url: '/configuracion/empresa',
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Ferretería Central del Norte S.R.L.',
+        condicionIva: 'responsable_inscripto',
+        logoUrl: logoGrande,
+      },
+    });
+    expect(resPutLogoGrande.statusCode).toBe(200);
+
+    // 5. Negocio B no ve los datos de Negocio A (RLS)
     const resGetB = await app.inject({
       method: 'GET',
       url: '/configuracion/empresa',
