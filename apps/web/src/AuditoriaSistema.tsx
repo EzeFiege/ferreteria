@@ -22,6 +22,8 @@ const ACCIONES_LABELS: Record<AccionAuditoria, { label: string; color: string }>
   apertura_ejercicio: { label: 'Apertura de Ejercicio Contable', color: 'bg-teal-100 text-teal-800 border-teal-300' },
   cheque_rechazado: { label: 'Cheque Rechazado', color: 'bg-red-100 text-red-800 border-red-300' },
   asiento_manual: { label: 'Asiento Contable Manual', color: 'bg-slate-100 text-slate-800 border-slate-300' },
+  crear_acopio: { label: 'Nuevo Acopio Materiales', color: 'bg-amber-100 text-amber-800 border-amber-300' },
+  entrega_acopio: { label: 'Remito Entrega Acopio', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
 };
 
 function detalleString(val: unknown, fallback = ''): string {

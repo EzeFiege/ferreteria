@@ -639,3 +639,50 @@ export const precioProductoLista = pgTable('precio_producto_lista', {
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
   actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Fase 18: Acopio de Materiales y Entregas Parciales (Venta Acopiada)
+export const acopio = pgTable('acopio', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: text('numero').notNull(),
+  clienteId: uuid('cliente_id').notNull(),
+  ventaId: uuid('venta_id'),
+  estado: text('estado').$type<'activo' | 'completado' | 'cancelado'>().notNull().default('activo'),
+  fechaEmision: date('fecha_emision').notNull().defaultNow(),
+  notas: text('notas'),
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const itemAcopio = pgTable('item_acopio', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  acopioId: uuid('acopio_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  cantidadComprada: numeric('cantidad_comprada', { precision: 14, scale: 3 }).notNull(),
+  cantidadEntregada: numeric('cantidad_entregada', { precision: 14, scale: 3 }).notNull().default('0.000'),
+  precioUnitario: numeric('precio_unitario', { precision: 14, scale: 2 }).notNull(),
+  subtotal: numeric('subtotal', { precision: 14, scale: 2 }).notNull(),
+});
+
+export const remitoEntregaAcopio = pgTable('remito_entrega_acopio', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  acopioId: uuid('acopio_id').notNull(),
+  numero: text('numero').notNull(),
+  fecha: timestamp('fecha', { withTimezone: true }).notNull().defaultNow(),
+  retiradoPorNombre: text('retirado_por_nombre').notNull(),
+  retiradoPorDni: text('retirado_por_dni'),
+  vehiculoPatente: text('vehiculo_patente'),
+  observaciones: text('observaciones'),
+  creadoPor: text('creado_por').notNull(),
+});
+
+export const itemRemitoEntregaAcopio = pgTable('item_remito_entrega_acopio', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  remitoId: uuid('remito_id').notNull(),
+  itemAcopioId: uuid('item_acopio_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  cantidad: numeric('cantidad', { precision: 14, scale: 3 }).notNull(),
+});

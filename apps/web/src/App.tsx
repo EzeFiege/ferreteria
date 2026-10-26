@@ -27,6 +27,7 @@ import { TesoreriaFlujo } from './TesoreriaFlujo.js';
 import { FacturacionFiscal } from './FacturacionFiscal.js';
 import { Contabilidad } from './Contabilidad.js';
 import { Presupuestos } from './Presupuestos.js';
+import { AcopiosMateriales } from './AcopiosMateriales.js';
 import { AuditoriaSistema } from './AuditoriaSistema.js';
 import { InicioDashboard } from './InicioDashboard.js';
 import {
@@ -307,6 +308,7 @@ export function App(): ReactElement {
     | 'contabilidad'
     | 'presupuestos'
     | 'auditoria'
+    | 'acopios'
   >('inicio');
   const [sidebarAbierto, setSidebarAbierto] = useState<boolean>(false);
 
@@ -1586,6 +1588,23 @@ export function App(): ReactElement {
 
               <button
                 type="button"
+                data-testid="tab-acopios"
+                onClick={() => {
+                  setPestana('acopios');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'acopios'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">📦</span>
+                <span>Acopio de Materiales</span>
+              </button>
+
+              <button
+                type="button"
                 data-testid="tab-compras"
                 onClick={() => {
                   setPestana('compras');
@@ -2098,6 +2117,13 @@ export function App(): ReactElement {
             token={operadorActivo.token}
             rolUsuario={operadorActivo.rol}
             rubros={contexto.rubros}
+          />
+        )}
+
+        {pestana === 'acopios' && (
+          <AcopiosMateriales
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
           />
         )}
 

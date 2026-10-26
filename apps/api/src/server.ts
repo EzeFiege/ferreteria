@@ -20,6 +20,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerInventarioRoutes } from './routes/inventario.js';
 import { registerPreciosReglasRoutes } from './routes/precios-reglas.js';
 import { registerReabastecimientoRoutes } from './routes/reabastecimiento.js';
+import { registerAcopiosRoutes } from './routes/acopios.js';
 
 const { Pool } = pg;
 
@@ -115,6 +116,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     registerInventarioRoutes(targetApp, { pool, verifyToken: options.verifyToken });
     registerPreciosReglasRoutes(targetApp, { pool, verifyToken: options.verifyToken });
     registerReabastecimientoRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerAcopiosRoutes(targetApp, { pool, verifyToken: options.verifyToken });
   };
 
   // 1. Registro directo en la raíz (ej: /auth/login, /contexto-mostrador)
@@ -163,6 +165,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         urlRaw.startsWith('/listas-precios') ||
         urlRaw.startsWith('/reglas-volumen') ||
         urlRaw.startsWith('/reabastecimiento') ||
+        urlRaw.startsWith('/acopios') ||
         urlRaw.startsWith('/stock') ||
         urlRaw.startsWith('/reportes') ||
         urlRaw.startsWith('/configuracion') ||

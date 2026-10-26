@@ -826,6 +826,8 @@ export const accionAuditoriaSchema = z.enum([
   'apertura_ejercicio',
   'cheque_rechazado',
   'asiento_manual',
+  'crear_acopio',
+  'entrega_acopio',
 ]);
 export type AccionAuditoria = z.infer<typeof accionAuditoriaSchema>;
 
@@ -838,6 +840,7 @@ export const entidadAuditoriaSchema = z.enum([
   'ejercicio_contable',
   'cheque',
   'asiento_contable',
+  'acopio',
 ]);
 export type EntidadAuditoria = z.infer<typeof entidadAuditoriaSchema>;
 
@@ -1345,4 +1348,110 @@ export interface GenerarOrdenesReabastecimientoResponse {
   ok: boolean;
   ordenesCreadas: OrdenCompraGeneradaInfo[];
   mensaje: string;
+}
+
+// -------------------------------------------------------------
+// Fase 18: Acopio de Materiales y Entregas Parciales (Venta Acopiada)
+// -------------------------------------------------------------
+export const itemCrearAcopioSchema = z.object({
+  productoId: uuidSchema,
+  cantidad: cantidadDecimalSchema,
+  precioUnitario: montoNoNegativoSchema,
+});
+export type ItemCrearAcopioInput = z.infer<typeof itemCrearAcopioSchema>;
+
+export const crearAcopioSchema = z.object({
+  clienteId: uuidSchema,
+  ventaId: uuidSchema.optional().nullable(),
+  fechaEmision: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato AAAA-MM-DD')
+    .optional(),
+  notas: z.string().trim().max(500).optional().nullable(),
+  items: z
+    .array(itemCrearAcopioSchema)
+    .min(1, 'El acopio debe tener al menos un artículo'),
+});
+export type CrearAcopioInput = z.infer<typeof crearAcopioSchema>;
+
+export const itemEntregaAcopioSchema = z.object({
+  itemAcopioId: uuidSchema,
+  productoId: uuidSchema,
+  cantidad: cantidadDecimalSchema,
+});
+export type ItemEntregaAcopioInput = z.infer<typeof itemEntregaAcopioSchema>;
+
+export const registrarEntregaAcopioSchema = z.object({
+  retiradoPorNombre: z.string().trim().min(2, 'Indique el nombre de quien retira'),
+  retiradoPorDni: z.string().trim().max(30).optional().nullable(),
+  vehiculoPatente: z.string().trim().max(20).optional().nullable(),
+  observaciones: z.string().trim().max(500).optional().nullable(),
+  items: z
+    .array(itemEntregaAcopioSchema)
+    .min(1, 'Debe entregar al menos un producto'),
+});
+export type RegistrarEntregaAcopioInput = z.infer<
+  typeof registrarEntregaAcopioSchema
+>;
+
+export interface AcopioResumenItem {
+  id: string;
+  numero: string;
+  estado: 'activo' | 'completado' | 'cancelado';
+  fechaEmision: string;
+  clienteId: string;
+  clienteNombre: string;
+  clienteCuitDni: string | null;
+  clienteTelefono: string | null;
+  ventaId: string | null;
+  notas: string | null;
+  creadoPor: string;
+  creadoEn: string;
+  totalArticulos: number;
+  totalUnidadesCompradas: string;
+  totalUnidadesEntregadas: string;
+  saldoUnidadesPendientes: string;
+  totalValorizado: string;
+  pctEntregado: number;
+}
+
+export interface ItemAcopioDetalle {
+  id: string;
+  productoId: string;
+  productoCodigo: string;
+  productoNombre: string;
+  unidadPrincipal: string;
+  cantidadComprada: string;
+  cantidadEntregada: string;
+  saldoPendiente: string;
+  precioUnitario: string;
+  subtotal: string;
+  stockActualDeposito: string;
+}
+
+export interface RemitoEntregaItemDetalle {
+  id: string;
+  productoId: string;
+  productoCodigo: string;
+  productoNombre: string;
+  unidadPrincipal: string;
+  cantidad: string;
+}
+
+export interface RemitoEntregaDetalle {
+  id: string;
+  numero: string;
+  fecha: string;
+  retiradoPorNombre: string;
+  retiradoPorDni: string | null;
+  vehiculoPatente: string | null;
+  observaciones: string | null;
+  creadoPor: string;
+  items: RemitoEntregaItemDetalle[];
+}
+
+export interface AcopioDetalleCompleto {
+  acopio: AcopioResumenItem;
+  items: ItemAcopioDetalle[];
+  remitos: RemitoEntregaDetalle[];
 }

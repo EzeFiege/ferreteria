@@ -642,3 +642,40 @@ Estado:
   - `pnpm lint` con 0 advertencias y 0 errores.
   - Suite completa de integración: 18 archivos de prueba, 98 tests pasando al 100%.
   - Compilación de producción (`pnpm build`) exitosa.
+
+---
+
+## Fase 18 — Acopio de Materiales y Entregas Parciales (Completada ✅)
+
+Objetivo: permitir a constructoras, contratistas y clientes particulares congelar el precio de compra de materiales (cemento, arena, hierros, pinturas, etc.) por adelantado, dejando la mercadería en custodia del negocio para su retiro diferido en múltiples viajes de flete o entregas parciales documentadas con remitos oficiales correlativos (`REM-XXXX`), sin duplicar egresos de dinero y deduciendo el stock físico del Kardex únicamente al momento del despacho real.
+
+Estado:
+- [x] Migración SQL `db/migrations/018_acopio_materiales.sql`:
+  - Tablas `acopio`, `item_acopio`, `remito_entrega_acopio`, `item_remito_entrega_acopio`.
+  - Vista analítica `v_acopios_resumen` con cálculo de totales valorizados, unidades compradas, unidades entregadas, saldo pendiente y porcentaje de avance.
+  - Secuencia correlativa para números de acopio (`ACP-XXXX`) y remitos de entrega (`REM-XXXX`).
+  - Row Level Security (RLS) completo y permisos concedidos a `app_user`.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `crearAcopioSchema`, `registrarEntregaAcopioSchema`, `CrearAcopioInput`, `RegistrarEntregaAcopioInput`, `AcopioResumenItem`, `AcopioDetalleCompleto`, `ItemAcopioDetalle`, `RemitoEntregaDetalle`.
+  - Acciones de auditoría `crear_acopio` y `entrega_acopio` en `accionAuditoriaSchema` y entidad `acopio` en `entidadAuditoriaSchema`.
+- [x] Backend API (`apps/api/src/routes/acopios.ts`):
+  - `GET /acopios`: listado filtrado por cliente y estado (`activo`, `completado`, `cancelado`).
+  - `GET /acopios/:id`: detalle completo con renglones de materiales, stock disponible en depósito e historial de remitos.
+  - `POST /acopios`: registro de nuevo acopio con cálculo de subtotales en centavos (`aCentavos`/`deCentavos`), numeración correlativa y auditoría.
+  - `POST /acopios/:id/entregas`: emisión de remito de entrega con validación estricta de saldo pendiente, descuento atómico en Kardex (`movimiento_stock` tipo `entrega_acopio`), transición automática a `completado` al entregar el 100% y auditoría.
+  - `GET /acopios/cliente/:clienteId/saldo`: consulta ágil de saldos pendientes por cliente.
+  - Suite de integración en `apps/api/src/routes/acopios.test.ts` con 4 tests pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Componente integral `apps/web/src/AcopiosMateriales.tsx`:
+    - Tablero con listado de acopios, filtros por estado (`todos`, `activo`, `completado`) y buscador rápido.
+    - Barra de progreso de entrega y tarjetas de unidades compradas vs entregadas y valor congelado.
+    - Detalle completo con alerta visual si el stock físico en depósito es menor que el saldo acopiado pendiente de retiro.
+    - Modal interactivo de nuevo acopio con buscador en vivo de clientes y catálogo de productos.
+    - Modal de emisión de remito de entrega con datos de transporte (chofer, DNI, patente de camión) y control de topes por saldo.
+    - Historial de remitos emitidos por acopio con detalle de materiales despachados y fecha/hora.
+  - Integración en la navegación lateral de `apps/web/src/App.tsx` bajo la sección *Stock & Clientes*.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero advertencias y cero errores.
+  - Suite completa de integración: **19 archivos de prueba, 102 tests pasando al 100%** en PostgreSQL real con Testcontainers.
+  - Compilación de producción con Vite (`pnpm build`) exitosa.
