@@ -679,3 +679,30 @@ Estado:
   - `pnpm lint` con cero advertencias y cero errores.
   - Suite completa de integración: **19 archivos de prueba, 102 tests pasando al 100%** en PostgreSQL real con Testcontainers.
   - Compilación de producción con Vite (`pnpm build`) exitosa.
+
+---
+
+## Fase 19 — Actualizador Masivo de Precios (Porcentaje por Rubro y Lista de Proveedor) (Completada ✅)
+
+Objetivo: permitir a los dueños y encargados de la ferretería actualizar de forma inmediata y masiva los precios de costo y venta ante listas de inflación o cambios de fabricantes, aplicando aumentos porcentuales por rubro con reglas de redondeo comercial (al entero, múltiplos de $10, $50 o $100) y procesando listas de proveedores tabuladas por SKU o código de barras, con auditoría inmutable en `registro_auditoria`.
+
+Estado:
+- [x] Esquemas compartidos en `packages/shared`:
+  - `reglaRedondeoPreciosSchema`, `baseActualizacionPrecioSchema`, `actualizarPreciosPorcentajeSchema`, `actualizarPreciosListaProveedorSchema`.
+  - Función de utilidad matemática pura `aplicarRedondeoPrecio` operando en centavos enteros (`aCentavos`/`deCentavos`).
+  - Suite de pruebas unitarias en `packages/shared/src/index.test.ts` (7 tests pasando al 100%).
+- [x] Backend API (`apps/api/src/routes/productos.ts`):
+  - `POST /productos/precios/previsualizar-aumento`: simula el impacto en memoria y calcula precios de venta proyectados por lista con redondeo comercial sin alterar la base de datos.
+  - `POST /productos/precios/aplicar-aumento`: actualización atómica de costos base y recálculo con registro en `registro_auditoria` (acción `cambio_precio` sobre `articulo`).
+  - `POST /productos/precios/actualizar-desde-lista`: conciliación y actualización por coincidencia de SKU o código de barras de pistola.
+  - Suite de integración en `apps/api/src/routes/productos.test.ts` con 14 tests pasando al 100% en PostgreSQL real.
+- [x] Frontend Web (`apps/web`):
+  - Componente `apps/web/src/ActualizadorMasivoPrecios.tsx`:
+    - Tab 1 (Aumento Porcentual): selector rápido de porcentajes (+5%, +10%, +15%, etc.), selector de rubro, base y regla de redondeo; botón de simulación con diff visual y confirmación definitiva.
+    - Tab 2 (Lista de Proveedor): área de texto para pegar columnas de Excel, detección automática de artículos por SKU/EAN y procesamiento en lote.
+  - Integración en `apps/web/src/CatalogoStock.tsx` mediante el botón `[⚡ Actualizar Precios]`.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con 0 advertencias y 0 errores.
+  - Suite completa de integración: **19 archivos de prueba, 106 tests pasando al 100%**.
+  - Compilación de producción con Vite (`pnpm build`) exitosa.

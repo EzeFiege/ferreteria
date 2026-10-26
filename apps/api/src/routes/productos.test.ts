@@ -518,5 +518,125 @@ interface TestLookupResponse {
       expect(prodActualizado?.costo_base).toBe('550.00');
       expect(Number(prodActualizado?.stock_actual_base)).toBe(65);
     });
+
+    it('Fase 19: previsualiza y aplica aumento porcentual por rubro con redondeo y auditoría', async () => {
+      // 1. Previsualizar aumento del 15% con redondeo a múltiplo de $100
+      const resPrevia = await app.inject({
+        method: 'POST',
+        url: '/productos/precios/previsualizar-aumento',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+        payload: {
+          porcentaje: 15,
+          base: 'costo_base',
+          rubroId: negocioA.rubroId,
+          redondeo: 'multiplo_100',
+        },
+      });
+
+      expect(resPrevia.statusCode).toBe(200);
+      const dataPrevia = resPrevia.json<{
+        totalCoincidentes: number;
+        previsualizacion: Array<{
+          codigo: string;
+          costoActual: string;
+          costoNuevo: string;
+          diferenciaPct: number;
+        }>;
+      }>();
+
+      expect(dataPrevia.totalCoincidentes).toBeGreaterThanOrEqual(1);
+      const itemPrevia = dataPrevia.previsualizacion.find(
+        (p) => p.codigo === 'CAB-TPR-25',
+      );
+      expect(itemPrevia).toBeDefined();
+      expect(itemPrevia?.diferenciaPct).toBe(15);
+      // Costo inicial de CAB-TPR-25 era 50000.00 -> +15% = 57500.00
+      expect(itemPrevia?.costoNuevo).toBe('57500.00');
+
+      // 2. Aplicar aumento del 10% con redondeo a entero
+      const resAplicar = await app.inject({
+        method: 'POST',
+        url: '/productos/precios/aplicar-aumento',
+        headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+        payload: {
+          porcentaje: 10,
+          base: 'costo_base',
+          rubroId: negocioA.rubroId,
+          redondeo: 'entero',
+        },
+      });
+
+      expect(resAplicar.statusCode).toBe(200);
+      const dataAplicar = resAplicar.json<{
+        totalArticulosModificados: number;
+        porcentajeAplicado: number;
+      }>();
+      expect(dataAplicar.totalArticulosModificados).toBeGreaterThanOrEqual(1);
+      expect(dataAplicar.porcentajeAplicado).toBe(10);
+
+      // Verificar que el costo base en la base de datos cambió a 55000.00 (50000.00 * 1.10)
+      const resCheck = await adminPool.query<{ costo_base: string }>(
+        `select costo_base::text from producto where codigo = 'CAB-TPR-25' and negocio_id = $1`,
+        [negocioA.negocioId],
+      );
+      expect(resCheck.rows[0]?.costo_base).toBe('55000.00');
+
+      // Verificar registro de auditoría inmutable
+      const resAudit = await adminPool.query<{ accion: string; detalles: { modulo: string } }>(
+        `select accion, detalles from registro_auditoria
+         where negocio_id = $1 and accion = 'cambio_precio' and detalles->>'modulo' = 'aumento_masivo_porcentaje'`,
+        [negocioA.negocioId],
+      );
+      expect(resAudit.rows.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('Fase 19: actualiza costos desde lista tabulada de proveedor por código de barras', async () => {
+      const resProv = await app.inject({
+        method: 'POST',
+        url: '/productos/precios/actualizar-desde-lista',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+        payload: {
+          items: [
+            {
+              identificador: '7791234567890', // Código de barras asociado a CAB-TPR-25
+              nuevoCosto: '58500.00',
+            },
+            {
+              identificador: 'CODIGO-INEXISTENTE-XYZ',
+              nuevoCosto: '999.00',
+            },
+          ],
+          redondeo: 'ninguno',
+        },
+      });
+
+      expect(resProv.statusCode).toBe(200);
+      const dataProv = resProv.json<{
+        totalArticulosModificados: number;
+        totalNoEncontrados: number;
+      }>();
+      expect(dataProv.totalArticulosModificados).toBe(1);
+      expect(dataProv.totalNoEncontrados).toBe(1);
+
+      // Verificar costo actualizado a 58500.00
+      const resCheck = await adminPool.query<{ costo_base: string }>(
+        `select costo_base::text from producto where codigo = 'CAB-TPR-25' and negocio_id = $1`,
+        [negocioA.negocioId],
+      );
+      expect(resCheck.rows[0]?.costo_base).toBe('58500.00');
+    });
+
+    it('Fase 19: rechaza actualización masiva de precios a usuarios con rol cajero (403)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/productos/precios/aplicar-aumento',
+        headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+        payload: {
+          porcentaje: 10,
+          base: 'costo_base',
+        },
+      });
+      expect(res.statusCode).toBe(403);
+    });
   });
 });

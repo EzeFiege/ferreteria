@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aCentavos,
+  aplicarRedondeoPrecio,
   cantidadDecimalSchema,
   deCentavos,
   evaluarDescuentoVolumen,
@@ -129,5 +130,29 @@ describe('@ferreteria/shared schemas y aritmética de dinero', () => {
       descuentoPct: '10.00',
       reglaNombre: 'Promo Rubro Bulonería 50+',
     });
+  });
+
+  it('Fase 19: aplica reglas de redondeo comercial a precios en pesos', () => {
+    // ninguno
+    expect(aplicarRedondeoPrecio('1234.56', 'ninguno')).toBe('1234.56');
+
+    // entero (al peso más cercano)
+    expect(aplicarRedondeoPrecio('1234.40', 'entero')).toBe('1234.00');
+    expect(aplicarRedondeoPrecio('1234.50', 'entero')).toBe('1235.00');
+
+    // múltiplo de $10
+    expect(aplicarRedondeoPrecio('1234.00', 'multiplo_10')).toBe('1230.00');
+    expect(aplicarRedondeoPrecio('1235.00', 'multiplo_10')).toBe('1240.00');
+    expect(aplicarRedondeoPrecio('1238.90', 'multiplo_10')).toBe('1240.00');
+
+    // múltiplo de $50
+    expect(aplicarRedondeoPrecio('1220.00', 'multiplo_50')).toBe('1200.00');
+    expect(aplicarRedondeoPrecio('1225.00', 'multiplo_50')).toBe('1250.00');
+    expect(aplicarRedondeoPrecio('1270.00', 'multiplo_50')).toBe('1250.00');
+    expect(aplicarRedondeoPrecio('1280.00', 'multiplo_50')).toBe('1300.00');
+
+    // múltiplo de $100
+    expect(aplicarRedondeoPrecio('1240.00', 'multiplo_100')).toBe('1200.00');
+    expect(aplicarRedondeoPrecio('1250.00', 'multiplo_100')).toBe('1300.00');
   });
 });

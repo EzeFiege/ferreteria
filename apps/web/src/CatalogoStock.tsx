@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
 import { ImportadorMasivoModal } from './ImportadorMasivoModal.js';
+import { ActualizadorMasivoPrecios } from './ActualizadorMasivoPrecios.js';
 
 interface ListaPrecioItem {
   id: string;
@@ -77,6 +78,7 @@ export function CatalogoStock({
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState<boolean>(false);
   const [modalEtiquetaAbierto, setModalEtiquetaAbierto] = useState<boolean>(false);
   const [modalImportarAbierto, setModalImportarAbierto] = useState<boolean>(false);
+  const [mostrarActualizadorPrecios, setMostrarActualizadorPrecios] = useState<boolean>(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState<ProductoItem | null>(null);
 
   // Formulario de Alta / Edición
@@ -538,6 +540,18 @@ export function CatalogoStock({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              data-testid="btn-actualizar-precios"
+              onClick={() => {
+                setMostrarActualizadorPrecios((prev) => !prev);
+              }}
+              className="rounded-xl border border-purple-200 bg-purple-50 px-3.5 py-2 text-sm font-bold text-purple-700 shadow-sm hover:bg-purple-100 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span>⚡</span>
+              <span>Actualizar Precios</span>
+            </button>
+
+            <button
+              type="button"
               data-testid="btn-carga-masiva"
               onClick={() => {
                 setModalImportarAbierto(true);
@@ -566,6 +580,18 @@ export function CatalogoStock({
           </div>
         )}
       </div>
+
+      {mostrarActualizadorPrecios && (
+        <ActualizadorMasivoPrecios
+          token={token}
+          rolUsuario={rolUsuario}
+          rubros={rubros}
+          onActualizacionExitosa={() => {
+            void cargarProductos();
+          }}
+          onCerrar={() => { setMostrarActualizadorPrecios(false); }}
+        />
+      )}
 
       {/* Tabla de Artículos con Stock Vivo y Precios por Lista */}
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm border border-slate-200">

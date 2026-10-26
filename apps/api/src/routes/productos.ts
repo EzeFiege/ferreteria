@@ -4,10 +4,15 @@ import type pg from 'pg';
 import { ZodError } from 'zod';
 import {
   aCentavos,
+  actualizarPreciosListaProveedorSchema,
+  actualizarPreciosPorcentajeSchema,
   ajusteStockSchema,
+  aplicarRedondeoPrecio,
+  deCentavos,
   guardarListaPrecioSchema,
   guardarProductoSchema,
   importarProductosMasivoSchema,
+  type PrevisualizacionPrecioItem,
 } from '@ferreteria/shared';
 import {
   assertRoles,
@@ -766,6 +771,274 @@ export function registerProductosRoutes(
             actualizados,
             movimientosStockCreados,
             rubrosCreados,
+          };
+        },
+      );
+
+      return await reply.send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // -------------------------------------------------------------
+  // Fase 19 — Endpoints del Actualizador Masivo de Precios
+  // -------------------------------------------------------------
+
+  // 1. Simulación / Previsualización de aumento porcentual antes de aplicar
+  app.post('/productos/precios/previsualizar-aumento', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['encargado', 'dueno']);
+
+      const body = actualizarPreciosPorcentajeSchema.parse(request.body);
+
+      const items = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }): Promise<{
+          totalCoincidentes: number;
+          previsualizacion: PrevisualizacionPrecioItem[];
+        }> => {
+          let sql = `
+            select
+              p.id,
+              p.codigo,
+              p.nombre,
+              r.nombre as rubro_nombre,
+              p.costo_base::text as costo_actual,
+              coalesce(ppl.precio_fijo, round(p.costo_base * (1 + coalesce(lp.margen_pct, 40) / 100), 2))::text as precio_venta_actual
+            from producto p
+            left join rubro r on r.id = p.rubro_id and r.negocio_id = p.negocio_id
+            left join lista_precio lp on lp.negocio_id = p.negocio_id and lower(lp.nombre) = 'mostrador'
+            left join precio_producto_lista ppl on ppl.producto_id = p.id and ppl.lista_precio_id = lp.id and ppl.negocio_id = p.negocio_id
+            where p.activo = true
+          `;
+          const params: unknown[] = [];
+
+          if (body.rubroId) {
+            params.push(body.rubroId);
+            sql += ` and p.rubro_id = $${String(params.length)}`;
+          }
+
+          sql += ' order by p.nombre asc';
+
+          const res = await client.query<{
+            id: string;
+            codigo: string;
+            nombre: string;
+            rubro_nombre: string | null;
+            costo_actual: string;
+            precio_venta_actual: string;
+          }>(sql, params);
+
+          const mult = 1 + body.porcentaje / 100;
+          const previsualizacion: PrevisualizacionPrecioItem[] = [];
+
+          for (const row of res.rows) {
+            const costoCent = aCentavos(row.costo_actual);
+            const nuevoCostoCent =
+              (costoCent * BigInt(Math.round(mult * 1000))) / 1000n;
+            const nuevoCostoSinRedondeo = deCentavos(nuevoCostoCent);
+            const costoNuevo = aplicarRedondeoPrecio(
+              nuevoCostoSinRedondeo,
+              body.redondeo,
+            );
+
+            const ventaCent = aCentavos(row.precio_venta_actual);
+            const nuevoVentaCent =
+              (ventaCent * BigInt(Math.round(mult * 1000))) / 1000n;
+            const nuevoVentaSinRedondeo = deCentavos(nuevoVentaCent);
+            const precioVentaNuevo = aplicarRedondeoPrecio(
+              nuevoVentaSinRedondeo,
+              body.redondeo,
+            );
+
+            const diffMontoCent =
+              body.base === 'costo_base'
+                ? aCentavos(costoNuevo) - costoCent
+                : aCentavos(precioVentaNuevo) - ventaCent;
+
+            previsualizacion.push({
+              productoId: row.id,
+              codigo: row.codigo,
+              nombre: row.nombre,
+              rubroNombre: row.rubro_nombre,
+              costoActual: row.costo_actual,
+              costoNuevo,
+              precioVentaActual: row.precio_venta_actual,
+              precioVentaNuevo,
+              diferenciaMonto: deCentavos(diffMontoCent),
+              diferenciaPct: body.porcentaje,
+            });
+          }
+
+          return {
+            totalCoincidentes: res.rows.length,
+            previsualizacion: previsualizacion.slice(0, 100), // Primeros 100 para interfaz ágil
+          };
+        },
+      );
+
+      return await reply.send(items);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 2. Aplicar aumento porcentual masivo
+  app.post('/productos/precios/aplicar-aumento', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['encargado', 'dueno']);
+
+      const body = actualizarPreciosPorcentajeSchema.parse(request.body);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          let sql = `
+            select id, costo_base::text as costo_base
+            from producto
+            where activo = true
+          `;
+          const params: unknown[] = [];
+
+          if (body.rubroId) {
+            params.push(body.rubroId);
+            sql += ` and rubro_id = $${String(params.length)}`;
+          }
+
+          const res = await client.query<{ id: string; costo_base: string }>(
+            sql,
+            params,
+          );
+
+          const mult = 1 + body.porcentaje / 100;
+          let modificados = 0;
+
+          for (const prod of res.rows) {
+            const costoCent = aCentavos(prod.costo_base);
+            const nuevoCostoCent =
+              (costoCent * BigInt(Math.round(mult * 1000))) / 1000n;
+            const nuevoCostoSinRedondeo = deCentavos(nuevoCostoCent);
+            const costoNuevo = aplicarRedondeoPrecio(
+              nuevoCostoSinRedondeo,
+              body.redondeo,
+            );
+
+            await client.query(
+              `update producto set costo_base = $1 where id = $2`,
+              [costoNuevo, prod.id],
+            );
+            modificados++;
+          }
+
+          // Auditoría inmutable de cambio de precios
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email ?? null,
+            rol: claims.rol,
+            accion: 'cambio_precio',
+            entidad: 'articulo',
+            detalles: {
+              modulo: 'aumento_masivo_porcentaje',
+              porcentaje: body.porcentaje,
+              base: body.base,
+              rubroId: body.rubroId ?? null,
+              proveedorId: body.proveedorId ?? null,
+              redondeo: body.redondeo,
+              totalArticulosModificados: modificados,
+            },
+          });
+
+          return {
+            totalArticulosModificados: modificados,
+            porcentajeAplicado: body.porcentaje,
+            baseModificada: body.base,
+            mensaje: `Se actualizaron con éxito los precios de ${String(modificados)} artículos (+${String(body.porcentaje)}%).`,
+          };
+        },
+      );
+
+      return await reply.send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 3. Actualizar costos a partir de lista de proveedor (por SKU o código de barra)
+  app.post('/productos/precios/actualizar-desde-lista', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['encargado', 'dueno']);
+
+      const body = actualizarPreciosListaProveedorSchema.parse(request.body);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          let modificados = 0;
+          let noEncontrados = 0;
+
+          for (const item of body.items) {
+            const iden = item.identificador.trim();
+            const costoRedondeado = aplicarRedondeoPrecio(
+              item.nuevoCosto,
+              body.redondeo,
+            );
+
+            // Buscar por código SKU o por código de barras
+            const resProd = await client.query<{ id: string }>(
+              `
+              select p.id
+              from producto p
+              left join producto_codigo_barra pcb on pcb.producto_id = p.id and pcb.negocio_id = p.negocio_id
+              where p.activo = true
+                and (p.codigo = $1 or pcb.codigo_barra = $1)
+              limit 1
+              `,
+              [iden],
+            );
+
+            const prodEncontrado = resProd.rows[0];
+            if (prodEncontrado) {
+              await client.query(
+                `update producto set costo_base = $1 where id = $2`,
+                [costoRedondeado, prodEncontrado.id],
+              );
+              modificados++;
+            } else {
+              noEncontrados++;
+            }
+          }
+
+          // Auditoría inmutable de cambio de precios
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email ?? null,
+            rol: claims.rol,
+            accion: 'cambio_precio',
+            entidad: 'articulo',
+            detalles: {
+              modulo: 'actualizacion_lista_proveedor',
+              totalLote: body.items.length,
+              modificados,
+              noEncontrados,
+              proveedorId: body.proveedorId ?? null,
+              redondeo: body.redondeo,
+            },
+          });
+
+          return {
+            totalArticulosModificados: modificados,
+            totalNoEncontrados: noEncontrados,
+            baseModificada: 'costo_base',
+            mensaje: `Lista procesada: ${String(modificados)} artículos actualizados, ${String(noEncontrados)} no encontrados.`,
           };
         },
       );

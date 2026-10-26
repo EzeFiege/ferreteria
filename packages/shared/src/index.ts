@@ -1455,3 +1455,110 @@ export interface AcopioDetalleCompleto {
   items: ItemAcopioDetalle[];
   remitos: RemitoEntregaDetalle[];
 }
+
+// -------------------------------------------------------------
+// Fase 19 — Actualizador Masivo de Precios
+// -------------------------------------------------------------
+
+export const reglaRedondeoPreciosSchema = z.enum([
+  'ninguno',
+  'entero',
+  'multiplo_10',
+  'multiplo_50',
+  'multiplo_100',
+]);
+export type ReglaRedondeoPrecios = z.infer<typeof reglaRedondeoPreciosSchema>;
+
+export const baseActualizacionPrecioSchema = z.enum([
+  'costo_base',
+  'precio_venta',
+]);
+export type BaseActualizacionPrecio = z.infer<
+  typeof baseActualizacionPrecioSchema
+>;
+
+export const actualizarPreciosPorcentajeSchema = z.object({
+  porcentaje: z
+    .number()
+    .min(-99, 'El porcentaje no puede ser menor a -99%')
+    .max(500, 'El porcentaje no puede ser mayor a +500%'),
+  base: baseActualizacionPrecioSchema.default('costo_base'),
+  rubroId: uuidSchema.optional().nullable(),
+  proveedorId: uuidSchema.optional().nullable(),
+  redondeo: reglaRedondeoPreciosSchema.default('ninguno'),
+});
+export type ActualizarPreciosPorcentajeInput = z.infer<
+  typeof actualizarPreciosPorcentajeSchema
+>;
+
+export const itemActualizacionProveedorSchema = z.object({
+  identificador: z.string().trim().min(1, 'El código es obligatorio'),
+  nuevoCosto: montoPositivoSchema,
+});
+export type ItemActualizacionProveedor = z.infer<
+  typeof itemActualizacionProveedorSchema
+>;
+
+export const actualizarPreciosListaProveedorSchema = z.object({
+  proveedorId: uuidSchema.optional().nullable(),
+  items: z
+    .array(itemActualizacionProveedorSchema)
+    .min(1, 'Debe incluir al menos un artículo'),
+  redondeo: reglaRedondeoPreciosSchema.default('ninguno'),
+});
+export type ActualizarPreciosListaProveedorInput = z.infer<
+  typeof actualizarPreciosListaProveedorSchema
+>;
+
+export interface PrevisualizacionPrecioItem {
+  productoId: string;
+  codigo: string;
+  nombre: string;
+  rubroNombre: string | null;
+  costoActual: string;
+  costoNuevo: string;
+  precioVentaActual: string;
+  precioVentaNuevo: string;
+  diferenciaMonto: string;
+  diferenciaPct: number;
+}
+
+export interface ResultadoActualizacionPrecios {
+  totalArticulosModificados: number;
+  porcentajeAplicado?: number | undefined;
+  baseModificada: string;
+  mensaje: string;
+}
+
+/**
+ * Aplica una regla de redondeo comercial a un importe expresado como string decimal.
+ * Respeta la regla 3 de AGENTS.md operando en centavos enteros con BigInt.
+ */
+export function aplicarRedondeoPrecio(
+  monto: string,
+  regla: ReglaRedondeoPrecios,
+): string {
+  const centavos = aCentavos(monto);
+  if (regla === 'ninguno' || centavos <= 0n) {
+    return monto;
+  }
+
+  let baseCentavos = 100n; // 'entero' = $1.00 = 100 centavos
+  if (regla === 'multiplo_10') {
+    baseCentavos = 1000n; // $10.00
+  } else if (regla === 'multiplo_50') {
+    baseCentavos = 5000n; // $50.00
+  } else if (regla === 'multiplo_100') {
+    baseCentavos = 10000n; // $100.00
+  }
+
+  // Redondeo aritmético: round(centavos / base) * base
+  const resto = centavos % baseCentavos;
+  const mitad = baseCentavos / 2n;
+  const redondeado =
+    resto >= mitad
+      ? centavos + (baseCentavos - resto)
+      : centavos - resto;
+
+  return deCentavos(redondeado > 0n ? redondeado : baseCentavos);
+}
