@@ -290,7 +290,7 @@ export type AjusteStockInput = z.infer<typeof ajusteStockSchema>;
 
 export const lookupEanResultSchema = z.object({
   encontrado: z.boolean(),
-  origen: z.enum(['local', 'mercadolibre', 'no_encontrado']),
+  origen: z.enum(['local', 'mercadolibre', 'catalogo_externo', 'no_encontrado']),
   codigoBarra: z.string(),
   nombre: z.string().optional(),
   marca: z.string().optional(),

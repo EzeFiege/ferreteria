@@ -333,7 +333,7 @@ interface TestLookupResponse {
     expect(res.statusCode).toBe(200);
     const lookup = res.json<TestLookupResponse>();
     expect(lookup.codigoBarra).toBe('9999999999999');
-    expect(['mercadolibre', 'no_encontrado']).toContain(lookup.origen);
+    expect(['mercadolibre', 'catalogo_externo', 'no_encontrado']).toContain(lookup.origen);
   });
 
   it('impide modificar o borrar movimientos de stock (libro de solo agregar con trigger)', async () => {

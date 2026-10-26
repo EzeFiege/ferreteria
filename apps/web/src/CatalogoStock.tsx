@@ -33,7 +33,7 @@ interface ProductoItem {
 
 interface LookupEanResponse {
   encontrado: boolean;
-  origen: 'local' | 'mercadolibre' | 'no_encontrado';
+  origen: 'local' | 'mercadolibre' | 'catalogo_externo' | 'no_encontrado';
   codigoBarra: string;
   nombre?: string;
   marca?: string;
@@ -70,6 +70,7 @@ export function CatalogoStock({
   // Escáner de pistola
   const [codigoPistolaInput, setCodigoPistolaInput] = useState<string>('');
   const [buscandoEan, setBuscandoEan] = useState<boolean>(false);
+  const [buscandoEnModal, setBuscandoEnModal] = useState<boolean>(false);
 
   // Modales
   const [modalAltaAbierto, setModalAltaAbierto] = useState<boolean>(false);
@@ -207,21 +208,22 @@ export function CatalogoStock({
         setAviso(
           `Producto localizado: ${lookup.nombre ?? ''} · Stock: ${lookup.stockActualBase ?? '0'} ${lookup.unidadPrincipal ?? 'un'}`,
         );
-      } else if (lookup.origen === 'mercadolibre') {
-        // Encontrado en Mercado Libre: abrir modal de alta con autocompletado
+      } else if (lookup.origen === 'mercadolibre' || lookup.origen === 'catalogo_externo') {
+        const origenNombre = lookup.origen === 'mercadolibre' ? 'Mercado Libre' : 'Catálogo Abierto EAN';
+        // Encontrado en internet: abrir modal de alta con autocompletado
         abrirModalAltaConDatos({
           codigo: codigoLimpio,
           nombre: lookup.nombre ?? '',
           marca: lookup.marca ?? '',
           imagenUrl: lookup.imagenUrl ?? '',
           codigosBarra: codigoLimpio,
-          origen: 'Mercado Libre',
+          origen: origenNombre,
         });
         setAviso(
-          `⚡ ¡Código EAN detectado en Mercado Libre! Datos autocompletados: "${lookup.nombre ?? ''}"`,
+          `⚡ ¡Código EAN detectado en ${origenNombre}! Datos autocompletados: "${lookup.nombre ?? ''}"`,
         );
       } else {
-        // No encontrado ni local ni en ML: abrir modal vacío con el código asignado
+        // No encontrado ni local ni en fuentes externas: abrir modal vacío con el código asignado
         abrirModalAltaConDatos({
           codigo: codigoLimpio,
           nombre: '',
@@ -236,6 +238,72 @@ export function CatalogoStock({
       setAviso('Error al buscar código de barras.');
     } finally {
       setBuscandoEan(false);
+    }
+  };
+
+  const consultarEanYAutocompletar = async (codigoABuscar: string): Promise<boolean> => {
+    const limpio = codigoABuscar.trim();
+    if (!limpio) return false;
+    setBuscandoEnModal(true);
+
+    try {
+      const res = await fetch(
+        apiUrl(`/api/productos/lookup-ean/${encodeURIComponent(limpio)}`),
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error('Error al consultar código');
+      }
+
+      const lookup = (await res.json()) as LookupEanResponse;
+
+      if (lookup.encontrado) {
+        if (lookup.nombre) setFormNombre(lookup.nombre);
+        if (lookup.marca) setFormMarca(lookup.marca);
+        if (lookup.imagenUrl) setFormImagenUrl(lookup.imagenUrl);
+
+        if (!formCodigosBarra) {
+          setFormCodigosBarra(limpio);
+        } else if (!formCodigosBarra.includes(limpio)) {
+          setFormCodigosBarra(`${formCodigosBarra}, ${limpio}`);
+        }
+
+        if (lookup.rubroSugerido && rubros.length > 0) {
+          const sugeridoLower = lookup.rubroSugerido.toLowerCase();
+          const rubroMatch = rubros.find(
+            (r) =>
+              sugeridoLower.includes(r.nombre.toLowerCase()) ||
+              r.nombre.toLowerCase().includes(sugeridoLower),
+          );
+          if (rubroMatch) {
+            setFormRubroId(rubroMatch.id);
+          }
+        }
+
+        const fuente =
+          lookup.origen === 'mercadolibre'
+            ? 'Mercado Libre'
+            : lookup.origen === 'catalogo_externo'
+              ? 'Catálogo Abierto EAN'
+              : 'Base de Datos Local';
+
+        setOrigenAutocompletado(fuente);
+        setAviso(`⚡ ¡Producto encontrado en ${fuente}! Datos autocompletados.`);
+        return true;
+      } else {
+        setAviso(
+          `No se encontraron datos en internet para el código ${limpio}. Podés ingresar los datos manualmente.`,
+        );
+        return false;
+      }
+    } catch {
+      setAviso('Error al buscar código en internet.');
+      return false;
+    } finally {
+      setBuscandoEnModal(false);
     }
   };
 
@@ -661,6 +729,12 @@ export function CatalogoStock({
                     <span>⚡ Datos autocompletados desde {origenAutocompletado}</span>
                   </div>
                 )}
+                {buscandoEnModal && (
+                  <div className="mt-1 flex items-center gap-2 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 w-fit animate-pulse">
+                    <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping" />
+                    <span>Buscando datos del producto en internet...</span>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -676,16 +750,41 @@ export function CatalogoStock({
             <form onSubmit={(e) => { void guardarProducto(e); }} className="mt-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold uppercase text-slate-600">Código / SKU</label>
-                  <input
-                    type="text"
-                    required
-                    value={formCodigo}
-                    onChange={(e) => {
-                      setFormCodigo(e.target.value);
-                    }}
-                    className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase text-slate-600">Código / SKU / EAN</label>
+                    <span className="text-[10px] text-slate-400">Escaneá o presioná Enter</span>
+                  </div>
+                  <div className="mt-1 flex gap-1.5">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Escaneá código de barras..."
+                      value={formCodigo}
+                      onChange={(e) => {
+                        setFormCodigo(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (formCodigo.trim()) {
+                            void consultarEanYAutocompletar(formCodigo);
+                          }
+                        }
+                      }}
+                      className="w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      disabled={buscandoEnModal || !formCodigo.trim()}
+                      onClick={() => {
+                        void consultarEanYAutocompletar(formCodigo);
+                      }}
+                      title="Buscar datos del artículo en internet"
+                      className="shrink-0 px-3 py-2 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition"
+                    >
+                      {buscandoEnModal ? '⏳' : '⚡ Buscar'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-bold uppercase text-slate-600">Marca</label>
@@ -837,35 +936,77 @@ export function CatalogoStock({
                 </div>
               </div>
 
-              {/* Códigos de barra adicionales y foto */}
+              {/* Códigos de barra adicionales y foto con preview */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold uppercase text-slate-600">
-                    Códigos de Barra (EAN-13 / UPC)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Separados por coma..."
-                    value={formCodigosBarra}
-                    onChange={(e) => {
-                      setFormCodigosBarra(e.target.value);
-                    }}
-                    className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900"
-                  />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase text-slate-600">
+                      Códigos de Barra (EAN-13 / UPC)
+                    </label>
+                    <span className="text-[10px] text-slate-400">Separados por coma</span>
+                  </div>
+                  <div className="mt-1 flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Ej. 7791234567890, 7790987654321"
+                      value={formCodigosBarra}
+                      onChange={(e) => {
+                        setFormCodigosBarra(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const primerCodigo = formCodigosBarra.split(',')[0]?.trim();
+                          if (primerCodigo) {
+                            void consultarEanYAutocompletar(primerCodigo);
+                          }
+                        }
+                      }}
+                      className="w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 font-mono"
+                    />
+                    <button
+                      type="button"
+                      disabled={buscandoEnModal || !formCodigosBarra.trim()}
+                      onClick={() => {
+                        const primerCodigo = formCodigosBarra.split(',')[0]?.trim();
+                        if (primerCodigo) {
+                          void consultarEanYAutocompletar(primerCodigo);
+                        }
+                      }}
+                      title="Buscar datos del primer código de barra en internet"
+                      className="shrink-0 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition"
+                    >
+                      {buscandoEnModal ? '⏳' : '🔍'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-bold uppercase text-slate-600">
                     URL de Imagen / Foto
                   </label>
-                  <input
-                    type="text"
-                    placeholder="https://..."
-                    value={formImagenUrl}
-                    onChange={(e) => {
-                      setFormImagenUrl(e.target.value);
-                    }}
-                    className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900"
-                  />
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="https://..."
+                      value={formImagenUrl}
+                      onChange={(e) => {
+                        setFormImagenUrl(e.target.value);
+                      }}
+                      className="w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900"
+                    />
+                    {formImagenUrl && (
+                      <div className="relative shrink-0">
+                        <img
+                          src={formImagenUrl}
+                          alt="Vista previa"
+                          className="h-10 w-10 rounded-lg border border-slate-200 object-cover bg-white"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
