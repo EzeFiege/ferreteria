@@ -1562,3 +1562,148 @@ export function aplicarRedondeoPrecio(
 
   return deCentavos(redondeado > 0n ? redondeado : baseCentavos);
 }
+
+// -------------------------------------------------------------
+// Fase 20 — Logística de Envíos, Despachos y Hoja de Ruta
+// -------------------------------------------------------------
+
+export const estadoDespachoSchema = z.enum([
+  'pendiente',
+  'en_camino',
+  'entregado',
+  'fallido',
+  'cancelado',
+]);
+export type EstadoDespacho = z.infer<typeof estadoDespachoSchema>;
+
+export const estadoHojaRutaSchema = z.enum([
+  'en_preparacion',
+  'en_viaje',
+  'finalizada',
+  'cancelada',
+]);
+export type EstadoHojaRuta = z.infer<typeof estadoHojaRutaSchema>;
+
+export const estadoParadaSchema = z.enum([
+  'pendiente',
+  'entregado',
+  'no_entregado',
+]);
+export type EstadoParada = z.infer<typeof estadoParadaSchema>;
+
+export const crearDespachoEnvioSchema = z.object({
+  clienteId: uuidSchema,
+  ventaId: uuidSchema.optional().nullable(),
+  remitoAcopioId: uuidSchema.optional().nullable(),
+  direccionDestino: z.string().trim().min(3, 'La dirección es obligatoria'),
+  localidad: z.string().trim().max(100).optional().nullable(),
+  contactoNombre: z
+    .string()
+    .trim()
+    .min(2, 'El nombre de contacto es obligatorio'),
+  contactoTelefono: z.string().trim().max(50).optional().nullable(),
+  franjaHoraria: z.string().trim().max(100).optional().nullable(),
+  costoFlete: montoNoNegativoSchema.default('0.00'),
+  notasDespacho: z.string().trim().max(500).optional().nullable(),
+});
+export type CrearDespachoEnvioInput = z.infer<typeof crearDespachoEnvioSchema>;
+
+export const cambiarEstadoDespachoSchema = z.object({
+  estado: estadoDespachoSchema,
+  motivoFallo: z.string().trim().max(500).optional().nullable(),
+});
+export type CambiarEstadoDespachoInput = z.infer<
+  typeof cambiarEstadoDespachoSchema
+>;
+
+export const crearHojaRutaSchema = z.object({
+  fechaSalida: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD')
+    .optional(),
+  fleteroNombre: z
+    .string()
+    .trim()
+    .min(2, 'El nombre del fletero es obligatorio'),
+  fleteroTelefono: z.string().trim().max(50).optional().nullable(),
+  vehiculoPatente: z.string().trim().max(20).optional().nullable(),
+  observaciones: z.string().trim().max(500).optional().nullable(),
+  despachosIds: z
+    .array(uuidSchema)
+    .min(1, 'Debe incluir al menos un despacho en la hoja de ruta'),
+});
+export type CrearHojaRutaInput = z.infer<typeof crearHojaRutaSchema>;
+
+export const cambiarEstadoHojaRutaSchema = z.object({
+  estado: estadoHojaRutaSchema,
+});
+export type CambiarEstadoHojaRutaInput = z.infer<
+  typeof cambiarEstadoHojaRutaSchema
+>;
+
+export const registrarEntregaParadaSchema = z.object({
+  estadoParada: z.enum(['entregado', 'no_entregado']),
+  observacionesEntrega: z.string().trim().max(500).optional().nullable(),
+});
+export type RegistrarEntregaParadaInput = z.infer<
+  typeof registrarEntregaParadaSchema
+>;
+
+export interface DespachoEnvioResumen {
+  id: string;
+  numero: string;
+  ventaId: string | null;
+  remitoAcopioId: string | null;
+  clienteId: string;
+  clienteNombre: string;
+  clienteCuitDni: string | null;
+  direccionDestino: string;
+  localidad: string | null;
+  contactoNombre: string;
+  contactoTelefono: string | null;
+  franjaHoraria: string | null;
+  costoFlete: string;
+  estado: EstadoDespacho;
+  notasDespacho: string | null;
+  motivoFallo: string | null;
+  creadoPor: string;
+  creadoEn: string;
+  entregadoEn: string | null;
+  hojaRutaId: string | null;
+  hojaRutaNumero: string | null;
+  fleteroNombre: string | null;
+  vehiculoPatente: string | null;
+  ordenParada: number | null;
+}
+
+export interface ItemHojaRutaDetalle {
+  id: string;
+  despachoId: string;
+  despachoNumero: string;
+  clienteNombre: string;
+  direccionDestino: string;
+  localidad: string | null;
+  contactoNombre: string;
+  contactoTelefono: string | null;
+  ordenParada: number;
+  estadoParada: EstadoParada;
+  entregadoEn: string | null;
+  observacionesEntrega: string | null;
+}
+
+export interface HojaRutaDetalleCompleto {
+  id: string;
+  numero: string;
+  fechaSalida: string;
+  fleteroNombre: string;
+  fleteroTelefono: string | null;
+  vehiculoPatente: string | null;
+  estado: EstadoHojaRuta;
+  observaciones: string | null;
+  creadoPor: string;
+  creadoEn: string;
+  cerradaEn: string | null;
+  totalParadas: number;
+  paradasEntregadas: number;
+  paradas: ItemHojaRutaDetalle[];
+}

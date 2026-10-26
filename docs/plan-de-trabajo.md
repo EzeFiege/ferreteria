@@ -706,3 +706,28 @@ Estado:
   - `pnpm lint` con 0 advertencias y 0 errores.
   - Suite completa de integración: **19 archivos de prueba, 106 tests pasando al 100%**.
   - Compilación de producción con Vite (`pnpm build`) exitosa.
+
+---
+
+## Fase 20 — Logística de Envíos, Despachos y Hoja de Ruta para Fletero (Completada ✅)
+
+Objetivo: coordinar integralmente las entregas a domicilio de materiales pesados (áridos, perfiles, bolsas de cemento, herramientas), armar hojas de ruta agrupadas por vehículo/fletero, optimizar el orden de paradas y registrar la rendición de cobranzas en contraentrega con firma y comprobante de entrega.
+
+Estado:
+- [x] Migración SQL `db/migrations/019_logistica_despachos.sql`:
+  - Tablas `despacho_envio`, `hoja_ruta_fletero`, `item_hoja_ruta` con claves compuestas `(id, negocio_id)`, triggers inmutables y políticas RLS.
+  - Vista agregada `v_despachos_resumen` con `with (security_invoker = true)` para cálculo de métricas en tiempo real.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `crearDespachoEnvioSchema`, `actualizarDespachoEnvioSchema`, `crearHojaRutaSchema`, `actualizarItemHojaRutaSchema`, `cerrarHojaRutaSchema`.
+- [x] Backend API (`apps/api/src/routes/logistica.ts`):
+  - Endpoints para despacho de envíos: `GET /logistica/despachos`, `POST /logistica/despachos`, `GET /logistica/despachos/:id`, `PATCH /logistica/despachos/:id`.
+  - Endpoints para hojas de ruta y fleteros: `GET /logistica/hojas-ruta`, `POST /logistica/hojas-ruta`, `GET /logistica/hojas-ruta/:id`, `PATCH /logistica/hojas-ruta/:id/items/:itemId`, `POST /logistica/hojas-ruta/:id/cerrar`.
+  - Suite de integración backend en `apps/api/src/routes/logistica.test.ts` (4 tests pasando al 100%).
+- [x] Frontend Web (`apps/web`):
+  - Componente completo `apps/web/src/LogisticaDespachos.tsx` con tablero de estado (Pendientes, En Viaje, Entregados, Reprogramados), buscador por cliente/remito/zona, modal de nuevo envío, asistente de armado de hoja de ruta con selección múltiple, control de paradas y botón de impresión de hoja de ruta con remitos.
+  - Integración en navegación lateral y renderizado de `apps/web/src/App.tsx` (`tab-logistica`).
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero advertencias y cero errores.
+  - Suite completa de integración: **20 archivos de prueba, 110 tests pasando al 100%** en PostgreSQL real con Testcontainers.
+  - Compilación de producción con Vite (`pnpm build`) exitosa.

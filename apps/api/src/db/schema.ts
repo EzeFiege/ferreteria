@@ -686,3 +686,60 @@ export const itemRemitoEntregaAcopio = pgTable('item_remito_entrega_acopio', {
   productoId: uuid('producto_id').notNull(),
   cantidad: numeric('cantidad', { precision: 14, scale: 3 }).notNull(),
 });
+
+// Fase 20: Logística de Envíos, Despachos y Hoja de Ruta para Fletero
+export const despachoEnvio = pgTable('despacho_envio', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: text('numero').notNull(),
+  ventaId: uuid('venta_id'),
+  remitoAcopioId: uuid('remito_acopio_id'),
+  clienteId: uuid('cliente_id').notNull(),
+  direccionDestino: text('direccion_destino').notNull(),
+  localidad: text('localidad'),
+  contactoNombre: text('contacto_nombre').notNull(),
+  contactoTelefono: text('contacto_telefono'),
+  franjaHoraria: text('franja_horaria'),
+  costoFlete: numeric('costo_flete', { precision: 14, scale: 2 }).notNull().default('0.00'),
+  estado: text('estado')
+    .$type<'pendiente' | 'en_camino' | 'entregado' | 'fallido' | 'cancelado'>()
+    .notNull()
+    .default('pendiente'),
+  notasDespacho: text('notas_despacho'),
+  motivoFallo: text('motivo_fallo'),
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  entregadoEn: timestamp('entregado_en', { withTimezone: true }),
+});
+
+export const hojaRutaFletero = pgTable('hoja_ruta_fletero', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: text('numero').notNull(),
+  fechaSalida: date('fecha_salida').notNull().defaultNow(),
+  fleteroNombre: text('fletero_nombre').notNull(),
+  fleteroTelefono: text('fletero_telefono'),
+  vehiculoPatente: text('vehiculo_patente'),
+  estado: text('estado')
+    .$type<'en_preparacion' | 'en_viaje' | 'finalizada' | 'cancelada'>()
+    .notNull()
+    .default('en_preparacion'),
+  observaciones: text('observaciones'),
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  cerradaEn: timestamp('cerrada_en', { withTimezone: true }),
+});
+
+export const itemHojaRuta = pgTable('item_hoja_ruta', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  hojaRutaId: uuid('hoja_ruta_id').notNull(),
+  despachoId: uuid('despacho_id').notNull(),
+  ordenParada: integer('orden_parada').notNull().default(1),
+  estadoParada: text('estado_parada')
+    .$type<'pendiente' | 'entregado' | 'no_entregado'>()
+    .notNull()
+    .default('pendiente'),
+  entregadoEn: timestamp('entregado_en', { withTimezone: true }),
+  observacionesEntrega: text('observaciones_entrega'),
+});
