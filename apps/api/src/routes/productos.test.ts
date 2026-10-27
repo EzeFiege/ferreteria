@@ -336,6 +336,23 @@ interface TestLookupResponse {
     expect(['mercadolibre', 'catalogo_externo', 'no_encontrado']).toContain(lookup.origen);
   });
 
+  it('resuelve artículos por código de barras aproximado y web (ej: 7793863750696)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/productos/lookup-ean/7793863750696',
+      headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const lookup = res.json<TestLookupResponse>();
+    expect(lookup.codigoBarra).toBe('7793863750696');
+    // Si hay internet resuelve como catalogo_externo o mercadolibre; si no hay red responde sin romper
+    if (lookup.encontrado) {
+      expect(['catalogo_externo', 'mercadolibre']).toContain(lookup.origen);
+      expect(lookup.nombre).toBeDefined();
+    }
+  });
+
   it('impide modificar o borrar movimientos de stock (libro de solo agregar con trigger)', async () => {
     const client = await adminPool.connect();
     try {

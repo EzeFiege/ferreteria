@@ -48,6 +48,12 @@ interface LookupEanResponse {
   unidadSecundaria?: string;
   permiteFraccion?: boolean;
   precios?: Record<string, string>;
+  candidatos?: Array<{
+    nombre: string;
+    marca?: string;
+    rubro?: string;
+    snippet?: string;
+  }>;
 }
 
 export interface CatalogoStockProps {
@@ -96,6 +102,9 @@ export function CatalogoStock({
   const [formCodigosBarra, setFormCodigosBarra] = useState<string>('');
   const [formImagenUrl, setFormImagenUrl] = useState<string>('');
   const [origenAutocompletado, setOrigenAutocompletado] = useState<string | null>(null);
+  const [candidatosWeb, setCandidatosWeb] = useState<
+    Array<{ nombre: string; marca?: string; rubro?: string; snippet?: string }>
+  >([]);
 
   // Formulario de Ajuste de Stock
   const [ajusteTipo, setAjusteTipo] = useState<
@@ -211,7 +220,8 @@ export function CatalogoStock({
           `Producto localizado: ${lookup.nombre ?? ''} · Stock: ${lookup.stockActualBase ?? '0'} ${lookup.unidadPrincipal ?? 'un'}`,
         );
       } else if (lookup.origen === 'mercadolibre' || lookup.origen === 'catalogo_externo') {
-        const origenNombre = lookup.origen === 'mercadolibre' ? 'Mercado Libre' : 'Catálogo Abierto EAN';
+        const origenNombre = lookup.origen === 'mercadolibre' ? 'Mercado Libre' : 'Búsqueda Web EAN';
+        setCandidatosWeb(lookup.candidatos ?? []);
         // Encontrado en internet: abrir modal de alta con autocompletado
         abrirModalAltaConDatos({
           codigo: codigoLimpio,
@@ -220,11 +230,13 @@ export function CatalogoStock({
           imagenUrl: lookup.imagenUrl ?? '',
           codigosBarra: codigoLimpio,
           origen: origenNombre,
+          rubroSugerido: lookup.rubroSugerido,
         });
         setAviso(
           `⚡ ¡Código EAN detectado en ${origenNombre}! Datos autocompletados: "${lookup.nombre ?? ''}"`,
         );
       } else {
+        setCandidatosWeb([]);
         // No encontrado ni local ni en fuentes externas: abrir modal vacío con el código asignado
         abrirModalAltaConDatos({
           codigo: codigoLimpio,
@@ -266,6 +278,9 @@ export function CatalogoStock({
         if (lookup.nombre) setFormNombre(lookup.nombre);
         if (lookup.marca) setFormMarca(lookup.marca);
         if (lookup.imagenUrl) setFormImagenUrl(lookup.imagenUrl);
+        if (lookup.candidatos && lookup.candidatos.length > 0) {
+          setCandidatosWeb(lookup.candidatos);
+        }
 
         if (!formCodigosBarra) {
           setFormCodigosBarra(limpio);
@@ -289,13 +304,14 @@ export function CatalogoStock({
           lookup.origen === 'mercadolibre'
             ? 'Mercado Libre'
             : lookup.origen === 'catalogo_externo'
-              ? 'Catálogo Abierto EAN'
+              ? 'Búsqueda Web EAN'
               : 'Base de Datos Local';
 
         setOrigenAutocompletado(fuente);
         setAviso(`⚡ ¡Producto encontrado en ${fuente}! Datos autocompletados.`);
         return true;
       } else {
+        setCandidatosWeb([]);
         setAviso(
           `No se encontraron datos en internet para el código ${limpio}. Podés ingresar los datos manualmente.`,
         );
@@ -316,12 +332,23 @@ export function CatalogoStock({
     imagenUrl: string;
     codigosBarra: string;
     origen: string | null;
+    rubroSugerido?: string | undefined;
   }): void => {
     setFormId(null);
     setFormCodigo(datos.codigo);
     setFormNombre(datos.nombre);
     setFormMarca(datos.marca);
-    setFormRubroId(rubros[0]?.id ?? '');
+    let rubroIdInicial = rubros[0]?.id ?? '';
+    if (datos.rubroSugerido && rubros.length > 0) {
+      const sugeridoLower = datos.rubroSugerido.toLowerCase();
+      const match = rubros.find(
+        (r) =>
+          sugeridoLower.includes(r.nombre.toLowerCase()) ||
+          r.nombre.toLowerCase().includes(sugeridoLower),
+      );
+      if (match) rubroIdInicial = match.id;
+    }
+    setFormRubroId(rubroIdInicial);
     setFormCostoBase('0.00');
     setFormUnidadPrincipal('un');
     setFormUnidadSecundaria('');
@@ -840,6 +867,44 @@ export function CatalogoStock({
                   }}
                   className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
                 />
+
+                {candidatosWeb.length > 1 && (
+                  <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs">
+                    <div className="flex items-center justify-between font-bold text-indigo-950 mb-1.5">
+                      <span>💡 Coincidencias aproximadas detectadas en la web:</span>
+                      <span className="text-[10px] text-indigo-600 font-normal">Hacé clic para aplicar</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {candidatosWeb.slice(0, 4).map((cand, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setFormNombre(cand.nombre);
+                            if (cand.marca) setFormMarca(cand.marca);
+                            if (cand.rubro) {
+                              const rubroCand = cand.rubro.toLowerCase();
+                              const rMatch = rubros.find(
+                                (r) =>
+                                  r.nombre.toLowerCase().includes(rubroCand) ||
+                                  rubroCand.includes(r.nombre.toLowerCase()),
+                              );
+                              if (rMatch) setFormRubroId(rMatch.id);
+                            }
+                          }}
+                          className={`rounded-lg border px-2 py-1 text-left transition ${
+                            formNombre === cand.nombre
+                              ? 'bg-indigo-600 text-white border-indigo-700 font-bold'
+                              : 'bg-white text-slate-800 border-slate-200 hover:bg-indigo-100 hover:border-indigo-300'
+                          }`}
+                        >
+                          <div className="font-semibold truncate max-w-[240px]">{cand.nombre}</div>
+                          {cand.marca && <div className="text-[10px] opacity-80">Marca: {cand.marca}</div>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

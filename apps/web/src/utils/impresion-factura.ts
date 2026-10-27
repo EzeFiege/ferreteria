@@ -7,14 +7,14 @@ import type { ComprobanteFiscalDetalle } from '@ferreteria/shared';
 
 export interface DatosEmisorFiscal {
   razonSocial: string;
-  nombreFantasia?: string;
+  nombreFantasia?: string | undefined;
   cuit: string;
-  iibb?: string;
-  inicioActividades?: string;
-  domicilio?: string;
-  condicionIva?: string;
-  telefono?: string;
-  logoUrl?: string;
+  iibb?: string | undefined;
+  inicioActividades?: string | undefined;
+  domicilio?: string | undefined;
+  condicionIva?: string | undefined;
+  telefono?: string | undefined;
+  logoUrl?: string | undefined;
 }
 
 export interface OpcionesImpresionFactura {

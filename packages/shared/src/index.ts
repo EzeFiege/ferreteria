@@ -288,6 +288,14 @@ export const ajusteStockSchema = z.object({
 });
 export type AjusteStockInput = z.infer<typeof ajusteStockSchema>;
 
+export const lookupEanCandidatoSchema = z.object({
+  nombre: z.string(),
+  marca: z.string().optional(),
+  rubro: z.string().optional(),
+  snippet: z.string().optional(),
+});
+export type LookupEanCandidato = z.infer<typeof lookupEanCandidatoSchema>;
+
 export const lookupEanResultSchema = z.object({
   encontrado: z.boolean(),
   origen: z.enum(['local', 'mercadolibre', 'catalogo_externo', 'no_encontrado']),
@@ -304,6 +312,7 @@ export const lookupEanResultSchema = z.object({
   unidadSecundaria: z.string().optional(),
   permiteFraccion: z.boolean().optional(),
   precios: z.record(z.string(), z.string()).optional(),
+  candidatos: z.array(lookupEanCandidatoSchema).optional(),
 });
 export type LookupEanResult = z.infer<typeof lookupEanResultSchema>;
 
@@ -624,6 +633,40 @@ export interface ComprobanteFiscalDetalle {
   codigoQrArca: string | null;
   creadoEn: string;
   items?: ItemComprobanteFiscalDetalle[];
+}
+
+export const entornoAfipSchema = z.enum(['homologacion', 'produccion']);
+export type EntornoAfip = z.infer<typeof entornoAfipSchema>;
+
+export const guardarConfiguracionAfipSchema = z.object({
+  entorno: entornoAfipSchema.default('homologacion'),
+  cuit: z.string().min(10).max(13),
+  puntoVenta: z.number().int().min(1).max(99998),
+  certificadoPem: z.string().max(10000).optional().nullable(),
+  clavePrivadaPem: z.string().max(10000).optional().nullable(),
+  caiContingencia: z.string().max(20).optional().nullable(),
+  vencimientoCai: z.string().max(10).optional().nullable(),
+  activo: z.boolean().default(true),
+});
+export type GuardarConfiguracionAfipInput = z.infer<
+  typeof guardarConfiguracionAfipSchema
+>;
+
+export interface EstadoAfipResponse {
+  configurado: boolean;
+  activo: boolean;
+  entorno: EntornoAfip;
+  cuit: string | null;
+  puntoVenta: number;
+  tieneCertificado: boolean;
+  tieneClavePrivada: boolean;
+  caiContingencia?: string | null;
+  vencimientoCai?: string | null;
+  servidores: {
+    appServer: string;
+    dbServer: string;
+    authServer: string;
+  };
 }
 
 // -------------------------------------------------------------

@@ -301,4 +301,65 @@ describe('Fase 6 — Facturación Fiscal Electrónica ARCA / AFIP', () => {
     expect(facturaRecuperada.items?.[0]?.subtotal).toBe('8000.00');
     expect(facturaRecuperada.items?.[1]?.subtotal).toBe('2000.00');
   });
+
+  it('permite consultar estado y guardar configuración de AFIP / ARCA (CAE y CAI)', async () => {
+    // 1. Consultar estado inicial
+    const resEstado = await app.inject({
+      method: 'GET',
+      url: '/facturacion/afip/estado',
+      headers: { Authorization: `Bearer ${negocioA.tokenDueno}` },
+    });
+    expect(resEstado.statusCode).toBe(200);
+    const estado = resEstado.json<{
+      configurado: boolean;
+      servidores: { appServer: string; dbServer: string };
+    }>();
+    expect(estado.servidores.appServer).toBe('OK');
+
+    // 2. Guardar configuración con CUIT y CAI de contingencia
+    const resConfig = await app.inject({
+      method: 'POST',
+      url: '/facturacion/afip/configuracion',
+      headers: { Authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        entorno: 'homologacion',
+        cuit: '30712345678',
+        puntoVenta: 1,
+        caiContingencia: '12345678901234',
+        vencimientoCai: '2026-12-31',
+        activo: true,
+      },
+    });
+    expect(resConfig.statusCode).toBe(200);
+
+    // 3. Test de conexión
+    const resPing = await app.inject({
+      method: 'POST',
+      url: '/facturacion/afip/test-conexion',
+      headers: { Authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: { entorno: 'homologacion' },
+    });
+    expect(resPing.statusCode).toBe(200);
+    expect(resPing.json<{ ok: boolean }>().ok).toBe(true);
+
+    // 4. Emitir comprobante bajo modalidad CAI
+    const resCai = await app.inject({
+      method: 'POST',
+      url: '/facturacion/emitir',
+      headers: { Authorization: `Bearer ${negocioA.tokenCajero}` },
+      payload: {
+        puntoVentaNumero: 1,
+        tipoComprobante: 'factura_b',
+        razonSocialCliente: 'CONSUMIDOR FINAL CAI',
+        condicionIvaCliente: 'consumidor_final',
+        alicuotaIva: '21',
+        total: '5000.00',
+        enContingenciaOffline: false,
+      },
+    });
+    expect(resCai.statusCode).toBe(201);
+    const cmpCai = resCai.json<ComprobanteFiscalDetalle>();
+    expect(cmpCai.cae).toBe('12345678901234');
+    expect(cmpCai.vencimientoCae).toBe('2026-12-31');
+  });
 });

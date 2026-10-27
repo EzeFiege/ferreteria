@@ -4,10 +4,13 @@ import type { Pool } from 'pg';
 import { ZodError } from 'zod';
 import {
   emitirComprobanteFiscalSchema,
+  guardarConfiguracionAfipSchema,
   guardarPuntoVentaSchema,
   uuidSchema,
   type ComprobanteFiscalDetalle,
   type CondicionIva,
+  type EntornoAfip,
+  type EstadoAfipResponse,
   type TipoComprobanteFiscal,
 } from '@ferreteria/shared';
 import {
@@ -18,8 +21,13 @@ import {
 } from '../auth.js';
 import { withTenantTransaction } from '../db/context.js';
 import {
+  consultarEstadoServidoresAfip,
+  solicitarAutorizacionAfip,
+} from '../services/afip-wsfe-service.js';
+import {
   comprobanteFiscal,
   itemComprobanteFiscal,
+  negocio,
   puntoVenta,
 } from '../db/schema.js';
 
@@ -314,7 +322,7 @@ export function registerFacturacionRoutes(
             exento = totalNum.toFixed(2);
           }
 
-          // Autorización con ARCA / AFIP (en producción WSFEv1, en tests/offline simulación controlada)
+          // Autorización con ARCA / AFIP (WSFEv1 / CAE o CAI de contingencia)
           let cae: string | null = null;
           let vencimientoCae: string | null = null;
           let estado: 'autorizado' | 'contingencia_offline' = 'autorizado';
@@ -325,29 +333,37 @@ export function registerFacturacionRoutes(
             estado = 'contingencia_offline';
             resultadoAfip = 'P'; // Pendiente de sincronización
           } else {
-            // Emulación de CAE de 14 dígitos y vencimiento a 10 días
-            const cuitEmisorNum = parseInt(pv.cuitEmisor?.replace(/\D/g, '') || '30710000008', 10);
-            const caeNum = 74000000000000 + Math.floor(Math.random() * 9999999999);
-            cae = caeNum.toString();
-
-            const fechaVenc = new Date();
-            fechaVenc.setDate(fechaVenc.getDate() + 10);
-            vencimientoCae = fechaVenc.toISOString().slice(0, 10);
-
-            const docReceptorNum = parseInt(body.cuitCliente?.replace(/\D/g, '') || '0', 10);
+            const docReceptorNum = parseInt(
+              body.cuitCliente?.replace(/\D/g, '') || '0',
+              10,
+            );
             const tipoDocReceptor = docReceptorNum > 0 ? 80 : 99;
 
-            codigoQr = generarQrArca({
-              fecha: new Date().toISOString().slice(0, 10),
-              cuitEmisor: cuitEmisorNum,
+            const autAfip = await solicitarAutorizacionAfip({
+              entorno: pv.notas?.includes('"entorno":"produccion"')
+                ? 'produccion'
+                : 'homologacion',
+              cuitEmisor: pv.cuitEmisor ?? '30712345678',
               puntoVenta: body.puntoVentaNumero,
-              tipoComprobante: codigoAfip,
+              tipoComprobanteAfip: codigoAfip,
               numeroComprobante: proximoNumero,
-              importe: totalNum,
+              fechaEmision: new Date().toISOString().slice(0, 10),
+              importeTotal: totalNum,
+              importeNetoGravado: parseFloat(netoGravado),
+              importeIva:
+                parseFloat(iva21) + parseFloat(iva105) + parseFloat(iva27),
+              importeExento: parseFloat(exento),
               tipoDocReceptor,
               nroDocReceptor: docReceptorNum,
-              cae: caeNum,
+              esContingenciaCai: pv.tipo === 'manual_contingencia',
+              caiContingencia: pv.notas?.match(/"cai":"([^"]+)"/)?.[1],
+              vencimientoCai: pv.notas?.match(/"vencimientoCai":"([^"]+)"/)?.[1],
             });
+
+            cae = autAfip.cae ?? null;
+            vencimientoCae = autAfip.vencimientoCae ?? null;
+            resultadoAfip = autAfip.resultado;
+            codigoQr = autAfip.codigoQrArca ?? null;
           }
 
           const [creado] = await db
@@ -537,6 +553,163 @@ export function registerFacturacionRoutes(
       }
 
       return await reply.code(200).send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 6. Consultar estado y conectividad de AFIP / ARCA
+  app.get('/facturacion/afip/estado', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['encargado', 'dueno']);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ db }) => {
+          const [n] = await db
+            .select()
+            .from(negocio)
+            .where(eq(negocio.id, claims.negocioId));
+
+          const puntos = await db
+            .select()
+            .from(puntoVenta)
+            .where(eq(puntoVenta.negocioId, claims.negocioId))
+            .limit(1);
+
+          const pv = puntos[0];
+          let entorno: EntornoAfip = 'homologacion';
+          let tieneCertificado = false;
+          let tieneClave = false;
+          let caiContingencia: string | null = null;
+          let vencimientoCai: string | null = null;
+
+          if (pv?.notas) {
+            try {
+              const parsed = JSON.parse(pv.notas) as Record<string, unknown>;
+              if (parsed['entorno'] === 'produccion') entorno = 'produccion';
+              if (parsed['certificadoPem']) tieneCertificado = true;
+              if (parsed['clavePrivadaPem']) tieneClave = true;
+              if (typeof parsed['cai'] === 'string') caiContingencia = parsed['cai'];
+              if (typeof parsed['vencimientoCai'] === 'string') vencimientoCai = parsed['vencimientoCai'];
+            } catch {
+              // Notas no es JSON
+            }
+          }
+
+          const servidores = await consultarEstadoServidoresAfip(entorno);
+
+          const respuesta: EstadoAfipResponse = {
+            configurado: Boolean(pv?.cuitEmisor || n?.cuit),
+            activo: pv?.habilitado ?? true,
+            entorno,
+            cuit: pv?.cuitEmisor ?? n?.cuit ?? null,
+            puntoVenta: pv?.numero ?? 1,
+            tieneCertificado,
+            tieneClavePrivada: tieneClave,
+            caiContingencia,
+            vencimientoCai,
+            servidores,
+          };
+
+          return respuesta;
+        },
+      );
+
+      return await reply.code(200).send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 7. Guardar o actualizar configuración de AFIP / ARCA
+  app.post('/facturacion/afip/configuracion', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['dueno']);
+
+      const body = guardarConfiguracionAfipSchema.parse(request.body);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ db }) => {
+          const notasObj = {
+            entorno: body.entorno,
+            certificadoPem: body.certificadoPem ?? null,
+            clavePrivadaPem: body.clavePrivadaPem ?? null,
+            cai: body.caiContingencia ?? null,
+            vencimientoCai: body.vencimientoCai ?? null,
+          };
+
+          const [pvExistente] = await db
+            .select()
+            .from(puntoVenta)
+            .where(
+              and(
+                eq(puntoVenta.negocioId, claims.negocioId),
+                eq(puntoVenta.numero, body.puntoVenta),
+              ),
+            );
+
+          if (pvExistente) {
+            await db
+              .update(puntoVenta)
+              .set({
+                cuitEmisor: body.cuit,
+                tipo: body.caiContingencia ? 'manual_contingencia' : 'electronico_arca',
+                habilitado: body.activo,
+                notas: JSON.stringify(notasObj),
+                actualizadoEn: new Date(),
+              })
+              .where(eq(puntoVenta.id, pvExistente.id));
+          } else {
+            await db.insert(puntoVenta).values({
+              negocioId: claims.negocioId,
+              numero: body.puntoVenta,
+              nombre: `Punto de Venta ${body.puntoVenta} (ARCA)`,
+              tipo: body.caiContingencia ? 'manual_contingencia' : 'electronico_arca',
+              habilitado: body.activo,
+              cuitEmisor: body.cuit,
+              notas: JSON.stringify(notasObj),
+            });
+          }
+
+          // Actualizar CUIT en negocio si no estaba seteado
+          await db
+            .update(negocio)
+            .set({ cuit: body.cuit })
+            .where(eq(negocio.id, claims.negocioId));
+
+          return { ok: true, mensaje: 'Configuración de AFIP / ARCA actualizada correctamente' };
+        },
+      );
+
+      return await reply.code(200).send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 8. Test de conexión directo con servidores AFIP / ARCA
+  app.post('/facturacion/afip/test-conexion', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['encargado', 'dueno']);
+
+      const body = request.body as { entorno?: EntornoAfip } | undefined;
+      const entorno = body?.entorno ?? 'homologacion';
+
+      const servidores = await consultarEstadoServidoresAfip(entorno);
+
+      return await reply.code(200).send({
+        ok: true,
+        entorno,
+        servidores,
+        mensaje: 'Test de conectividad con servidores de AFIP / ARCA completado',
+      });
     } catch (err: unknown) {
       return handleRouteError(err, request, reply);
     }

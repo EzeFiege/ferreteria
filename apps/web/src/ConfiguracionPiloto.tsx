@@ -2,13 +2,20 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import {
   aCentavos,
   deCentavos,
+  type ComprobanteFiscalDetalle,
   type DatosEmpresaItem,
+  type EntornoAfip,
+  type EstadoAfipResponse,
   type RolUsuario,
   type UsuarioItemAdmin,
 } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
 import { GestionListasYReglas } from './GestionListasYReglas.js';
+import {
+  imprimirComprobanteFiscal,
+  type DatosEmisorFiscal,
+} from './utils/impresion-factura.js';
 
 interface MedioPagoConfigItem {
   id: string;
@@ -65,8 +72,26 @@ export function ConfiguracionPiloto({
   onCatalogosActualizados,
 }: ConfiguracionPilotoProps): ReactElement {
   const [tabActiva, setTabActiva] = useState<
-    'empresa' | 'usuarios' | 'permisos' | 'precios' | 'catalogos' | 'bitacora'
+    | 'empresa'
+    | 'afip'
+    | 'usuarios'
+    | 'permisos'
+    | 'precios'
+    | 'catalogos'
+    | 'bitacora'
   >('empresa');
+
+  // Configuración y Conectividad AFIP / ARCA
+  const [afipEstado, setAfipEstado] = useState<EstadoAfipResponse | null>(null);
+  const [cargandoAfip, setCargandoAfip] = useState<boolean>(false);
+  const [probandoAfip, setProbandoAfip] = useState<boolean>(false);
+  const [afipEntorno, setAfipEntorno] = useState<EntornoAfip>('homologacion');
+  const [afipPuntoVenta, setAfipPuntoVenta] = useState<number>(1);
+  const [afipCuit, setAfipCuit] = useState<string>('');
+  const [afipCai, setAfipCai] = useState<string>('');
+  const [afipVencimientoCai, setAfipVencimientoCai] = useState<string>('');
+  const [afipCertificadoPem, setAfipCertificadoPem] = useState<string>('');
+  const [afipClavePrivadaPem, setAfipClavePrivadaPem] = useState<string>('');
 
   // Catálogos
   const [mediosPago, setMediosPago] = useState<MedioPagoConfigItem[]>([]);
@@ -239,13 +264,176 @@ export function ConfiguracionPiloto({
     }
   }, [token]);
 
+  const cargarAfipEstado = useCallback(async () => {
+    try {
+      setCargandoAfip(true);
+      const res = await fetch(apiUrl('/api/facturacion/afip/estado'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as EstadoAfipResponse;
+        setAfipEstado(data);
+        setAfipEntorno(data.entorno);
+        setAfipPuntoVenta(data.puntoVenta);
+        if (data.cuit) setAfipCuit(data.cuit);
+        if (data.caiContingencia) setAfipCai(data.caiContingencia);
+        if (data.vencimientoCai) setAfipVencimientoCai(data.vencimientoCai);
+      }
+    } catch {
+      // Ignora en offline
+    } finally {
+      setCargandoAfip(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (rolActivo === 'dueno' || rolActivo === 'encargado') {
       void cargarCatalogos();
       void cargarEmpresa();
       void cargarUsuarios();
+      void cargarAfipEstado();
     }
-  }, [rolActivo, cargarCatalogos, cargarEmpresa, cargarUsuarios]);
+  }, [rolActivo, cargarCatalogos, cargarEmpresa, cargarUsuarios, cargarAfipEstado]);
+
+  const probarConexionAfip = async (): Promise<void> => {
+    try {
+      setProbandoAfip(true);
+      setMensaje(null);
+      setErrorMsg(null);
+      const res = await fetch(apiUrl('/api/facturacion/afip/test-conexion'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ entorno: afipEntorno }),
+      });
+      if (!res.ok) throw new Error('Error al conectar con AFIP');
+      const data = (await res.json()) as {
+        servidores: EstadoAfipResponse['servidores'];
+      };
+      setMensaje(
+        `✅ Conexión con AFIP/ARCA verificada: Servidor de Aplicación (${data.servidores.appServer}), Base de Datos (${data.servidores.dbServer}), Autenticación (${data.servidores.authServer})`,
+      );
+      await cargarAfipEstado();
+    } catch {
+      setErrorMsg('No se pudo establecer conexión con los servidores de AFIP / ARCA.');
+    } finally {
+      setProbandoAfip(false);
+    }
+  };
+
+  const guardarConfiguracionAfip = async (e: React.SyntheticEvent): Promise<void> => {
+    e.preventDefault();
+    setMensaje(null);
+    setErrorMsg(null);
+
+    const cuitLimpio = (afipCuit || cuit).replace(/\D/g, '');
+    if (!cuitLimpio || cuitLimpio.length < 10) {
+      setErrorMsg('Ingresá un CUIT emisor válido de 11 dígitos.');
+      return;
+    }
+
+    try {
+      const res = await fetch(apiUrl('/api/facturacion/afip/configuracion'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          entorno: afipEntorno,
+          cuit: cuitLimpio,
+          puntoVenta: afipPuntoVenta,
+          caiContingencia: afipCai.trim() || null,
+          vencimientoCai: afipVencimientoCai.trim() || null,
+          certificadoPem: afipCertificadoPem.trim() || null,
+          clavePrivadaPem: afipClavePrivadaPem.trim() || null,
+          activo: true,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        setErrorMsg(err.error ?? 'No se pudo guardar la configuración de AFIP.');
+        return;
+      }
+
+      setMensaje('Configuración de AFIP / ARCA y punto de venta guardados correctamente.');
+      await cargarAfipEstado();
+    } catch {
+      setErrorMsg('Error al conectar con el servidor.');
+    }
+  };
+
+  const probarImpresionComprobante = (formato: 'a4' | 'termico_80mm'): void => {
+    const emisor: DatosEmisorFiscal = {
+      razonSocial: razonSocial.trim() || nombreComercial.trim() || 'FERRETERÍA & CORRALÓN S.R.L.',
+      nombreFantasia: nombreComercial.trim() || undefined,
+      cuit: cuit.trim() || '30-71234567-8',
+      iibb: iibb.trim() || '30-71234567-8',
+      inicioActividades: inicioActividades.trim() || '2020-01-01',
+      domicilio: domicilioComercial.trim() || 'Av. San Martín 1234, Localidad',
+      condicionIva,
+      telefono: telefono.trim() || undefined,
+      logoUrl: logoUrl.trim() || undefined,
+    };
+
+    const compMuestra: ComprobanteFiscalDetalle = {
+      id: '00000000-0000-0000-0000-000000000001',
+      puntoVentaNumero: afipPuntoVenta || 1,
+      tipoComprobante: 'factura_b',
+      numeroComprobante: 1001,
+      codigoAfip: 6,
+      fechaEmision: hoyIsoLocal(),
+      ventaId: null,
+      cuitCliente: '20-12345678-9',
+      razonSocialCliente: 'CLIENTE MOSTRADOR (PRUEBA)',
+      condicionIvaCliente: 'consumidor_final',
+      subtotalNetoGravado: '10000.00',
+      subtotalIva21: '2100.00',
+      subtotalIva105: '0.00',
+      subtotalIva27: '0.00',
+      subtotalExento: '0.00',
+      total: '12100.00',
+      estado: 'autorizado',
+      cae: afipCai ? afipCai : '74123456789012',
+      vencimientoCae: afipVencimientoCai ? afipVencimientoCai : '2026-11-06',
+      codigoQrArca:
+        'https://www.afip.gob.ar/fe/qr/?p=eyJ2ZXIiOjEsImZlY2hhIjoiMjAyNi0xMC0yNyIsImN1aXQiOjMwNzEyMzQ1Njc4LCJwdG9WdGEiOjEsInRpcG9DbXAiOjYsIm5yb0NtcCI6MTAwMSwiaW1wb3J0ZSI6MTIxMDAsIm1vbmVkYSI6IlBFUyIsImN0eiI6MSwidGlwb0RvY1JlYyI6OTksIm5yb0RvY1JlYyI6MCwidGlwb0NvZEF1dCI6IkUiLCJjb2RBdXQiOjc0MTIzNDU2Nzg5MDEyfQ==',
+      creadoEn: new Date().toISOString(),
+      items: [
+        {
+          id: '1',
+          comprobanteId: '00000000-0000-0000-0000-000000000001',
+          productoId: null,
+          codigo: 'ART-001',
+          descripcion: 'Tornillo Autoperforante Fix 4x40mm (Caja x 100)',
+          unidad: 'caja',
+          cantidad: '2.000',
+          precioUnitario: '3500.00',
+          alicuotaIva: '21',
+          subtotal: '7000.00',
+          creadoEn: new Date().toISOString(),
+        },
+        {
+          id: '2',
+          comprobanteId: '00000000-0000-0000-0000-000000000001',
+          productoId: null,
+          codigo: 'ART-002',
+          descripcion: 'Cinta Pasacable Alma de Acero 10m',
+          unidad: 'un',
+          cantidad: '1.000',
+          precioUnitario: '5100.00',
+          alicuotaIva: '21',
+          subtotal: '5100.00',
+          creadoEn: new Date().toISOString(),
+        },
+      ],
+    };
+
+    imprimirComprobanteFiscal(compMuestra, emisor, { formato });
+  };
 
   // Guardar datos de empresa
   const guardarEmpresa = async (e: React.SyntheticEvent) => {
@@ -709,6 +897,17 @@ export function ConfiguracionPiloto({
           </button>
           <button
             type="button"
+            onClick={() => { setTabActiva('afip'); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              tabActiva === 'afip'
+                ? 'bg-slate-900 text-white shadow'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            🏛️ AFIP / ARCA (Facturación & CAE)
+          </button>
+          <button
+            type="button"
             onClick={() => { setTabActiva('usuarios'); }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
               tabActiva === 'usuarios'
@@ -1115,11 +1314,260 @@ export function ConfiguracionPiloto({
                   '¡Muchas gracias por su compra! Comprobante de control.'}
               </div>
             </div>
+
+            {/* Panel de Prueba de Impresión en Papel */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Prueba de Impresión en Papel
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Probá cómo salen tus facturas y tickets en tu impresora física usando los datos cargados.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  data-testid="btn-probar-factura-a4"
+                  onClick={() => { probarImpresionComprobante('a4'); }}
+                  className="rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 flex items-center justify-center gap-1.5 transition active:scale-98"
+                >
+                  <span>📄</span>
+                  <span>Probar Factura A4</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="btn-probar-ticket-termico"
+                  onClick={() => { probarImpresionComprobante('termico_80mm'); }}
+                  className="rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 flex items-center justify-center gap-1.5 transition active:scale-98"
+                >
+                  <span>🧾</span>
+                  <span>Probar Ticket 80mm</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* PESTAÑA 2: GESTIÓN DE USUARIOS */}
+      {/* PESTAÑA AFIP / ARCA: FACTURACIÓN ELECTRÓNICA & CAE / CAI */}
+      {tabActiva === 'afip' && (
+        <div className="space-y-6">
+          {/* Tarjeta de Estado y Conectividad */}
+          <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span>🏛️</span> Servicio Web de Facturación Electrónica ARCA / AFIP {cargandoAfip && <span className="text-xs text-slate-400 font-normal">(cargando...)</span>}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Integración directa mediante WSFEv1 para emisión de Facturas A, B, C con CAE automático, QR oficial y gestión de CAI.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="btn-test-conexion-afip"
+                  disabled={probandoAfip}
+                  onClick={() => { void probarConexionAfip(); }}
+                  className="rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 flex items-center gap-1.5 disabled:opacity-50 transition"
+                >
+                  <span>{probandoAfip ? '⏳' : '⚡'}</span>
+                  <span>{probandoAfip ? 'Consultando AFIP...' : 'Probar Conexión con AFIP'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Badges de Servidores AFIP */}
+            <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-500 block">Servidor de Aplicación</span>
+                  <span className="text-xs font-semibold text-slate-800">AppServer WSFEv1</span>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    afipEstado?.servidores.appServer === 'OK'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                  }`}
+                >
+                  {afipEstado?.servidores.appServer ?? 'OK'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-500 block">Base de Datos ARCA</span>
+                  <span className="text-xs font-semibold text-slate-800">DbServer AFIP</span>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    afipEstado?.servidores.dbServer === 'OK'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                  }`}
+                >
+                  {afipEstado?.servidores.dbServer ?? 'OK'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-500 block">Autenticación & Clave</span>
+                  <span className="text-xs font-semibold text-slate-800">AuthServer WSAA</span>
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    afipEstado?.servidores.authServer === 'OK'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                  }`}
+                >
+                  {afipEstado?.servidores.authServer ?? 'OK'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Formulario de Configuración AFIP */}
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+            <h4 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 mb-4">
+              Parámetros de Facturación y Puntos de Venta
+            </h4>
+            <form onSubmit={(e) => { void guardarConfiguracionAfip(e); }} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Entorno del Web Service
+                  </label>
+                  <select
+                    value={afipEntorno}
+                    onChange={(e) => { setAfipEntorno(e.target.value as EntornoAfip); }}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="homologacion">🧪 Homologación (Pruebas / Sandbox)</option>
+                    <option value="produccion">🚀 Producción Oficial (AFIP Real)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    CUIT del Emisor
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ej: 30-71234567-8"
+                    value={afipCuit}
+                    onChange={(e) => { setAfipCuit(e.target.value); }}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                    Punto de Venta Asignado
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99998"
+                    required
+                    value={afipPuntoVenta}
+                    onChange={(e) => { setAfipPuntoVenta(parseInt(e.target.value, 10) || 1); }}
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Contingencia CAI */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📋</span>
+                  <div>
+                    <h5 className="text-xs font-bold text-amber-950">
+                      Talonario de Contingencia con CAI (Código de Autorización de Impresión)
+                    </h5>
+                    <p className="text-[11px] text-amber-900">
+                      En caso de corte prolongado de internet o contingencia de imprenta, el sistema utiliza el CAI otorgado por AFIP.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-amber-900 mb-1">
+                      Número de CAI Otorgado
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 74123456789012"
+                      value={afipCai}
+                      onChange={(e) => { setAfipCai(e.target.value); }}
+                      className="w-full rounded-xl border border-amber-300 bg-white p-2.5 text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-amber-900 mb-1">
+                      Fecha de Vencimiento del CAI
+                    </label>
+                    <input
+                      type="date"
+                      value={afipVencimientoCai}
+                      onChange={(e) => { setAfipVencimientoCai(e.target.value); }}
+                      className="w-full rounded-xl border border-amber-300 bg-white p-2.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Certificados Digitales X.509 */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                <div>
+                  <h5 className="text-xs font-bold text-slate-800">
+                    Certificado Digital X.509 y Clave Privada (WSAA)
+                  </h5>
+                  <p className="text-[11px] text-slate-500">
+                    Generados a través del servicio "Administración de Certificados Digitales" con Clave Fiscal en AFIP.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                      Certificado Digital (.crt en texto PEM)
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                      value={afipCertificadoPem}
+                      onChange={(e) => { setAfipCertificadoPem(e.target.value); }}
+                      className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-[10px] font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-700 mb-1">
+                      Clave Privada (.key en texto PEM)
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
+                      value={afipClavePrivadaPem}
+                      onChange={(e) => { setAfipClavePrivadaPem(e.target.value); }}
+                      className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-[10px] font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  data-testid="btn-guardar-config-afip"
+                  className="rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white shadow hover:bg-slate-800 transition active:scale-98"
+                >
+                  Guardar Configuración AFIP / ARCA
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {tabActiva === 'usuarios' && (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200">
