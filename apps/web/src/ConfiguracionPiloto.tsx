@@ -419,6 +419,7 @@ export function ConfiguracionPiloto({
       setUsuarioRol('cajero');
       setUsuarioActivo(true);
       await cargarUsuarios();
+      await onCatalogosActualizados();
     } catch {
       setErrorMsg('Error de conexión al guardar el usuario.');
     }
@@ -456,6 +457,8 @@ export function ConfiguracionPiloto({
       );
       setUsuarioPasswordModalId(null);
       setNuevaPasswordDirecta('');
+      await cargarUsuarios();
+      await onCatalogosActualizados();
     } catch {
       setErrorMsg('Error de conexión al cambiar la contraseña.');
     }
@@ -486,6 +489,7 @@ export function ConfiguracionPiloto({
 
       setMensaje(`Usuario ${u.nombre} ahora está ${!u.activo ? 'activo' : 'inactivo'}.`);
       await cargarUsuarios();
+      await onCatalogosActualizados();
     } catch {
       setErrorMsg('Error al conectar con el servidor.');
     }
@@ -657,7 +661,7 @@ export function ConfiguracionPiloto({
           }}
           className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-slate-800"
         >
-          Autorizar como Dueño (Roberto)
+          Autorizar como Dueño
         </button>
       </div>
     );

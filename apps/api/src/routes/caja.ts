@@ -10,6 +10,7 @@ import {
   registrarMovimientoCajaSchema,
   registrarVentaSchema,
   revertirMovimientoSchema,
+  type RolUsuario,
   uuidSchema,
 } from '@ferreteria/shared';
 import {
@@ -29,6 +30,7 @@ import {
   movimiento,
   movimientoCtaCte,
   movimientoStock,
+  negocio,
   producto,
   rubro,
   turnoCaja,
@@ -174,9 +176,9 @@ export function registerCajaRoutes(
           );
           await client.query(
             `insert into usuario (id, negocio_id, proveedor_uid, nombre, rol) values
-              ($1, $4, 'demo-cajero', 'Juan (Cajero)', 'cajero'),
-              ($2, $4, 'demo-encargado', 'Marta (Encargada)', 'encargado'),
-              ($3, $4, 'demo-dueno', 'Roberto (Dueño)', 'dueno')
+              ($1, $4, 'demo-cajero', 'Cajero/a', 'cajero'),
+              ($2, $4, 'demo-encargado', 'Encargado/a', 'encargado'),
+              ($3, $4, 'demo-dueno', 'Dueño / Administrador', 'dueno')
              on conflict (id) do nothing`,
             [DEMO_CAJERO_ID, DEMO_ENCARGADO_ID, DEMO_DUENO_ID, DEMO_NEGOCIO_ID],
           );
@@ -205,6 +207,7 @@ export function registerCajaRoutes(
           const medios = await db.select().from(medioPago);
           const rubros = await db.select().from(rubro);
           const categorias = await db.select().from(categoria);
+          const [neg] = await db.select().from(negocio).where(eq(negocio.id, DEMO_NEGOCIO_ID));
 
           const turnoAbiertoRes = await client.query<{ id: string }>(
             'select id from turno_caja where caja_id = $1 and cierra_en is null limit 1',
@@ -212,47 +215,48 @@ export function registerCajaRoutes(
           );
           const turnoAbiertoId = turnoAbiertoRes.rows[0]?.id ?? null;
 
+          const usuariosDb = await client.query<{
+            id: string;
+            nombre: string;
+            rol: RolUsuario;
+            email: string | null;
+          }>(
+            `select id, nombre, rol, email from usuario
+             where negocio_id = $1 and activo = true
+             order by case rol when 'cajero' then 1 when 'encargado' then 2 when 'dueno' then 3 else 4 end, nombre asc`,
+            [DEMO_NEGOCIO_ID],
+          );
+
+          const operadores = (
+            usuariosDb.rows.length > 0
+              ? usuariosDb.rows
+              : [
+                  { id: DEMO_CAJERO_ID, nombre: 'Cajero/a', rol: 'cajero' as const, email: null },
+                  { id: DEMO_ENCARGADO_ID, nombre: 'Encargado/a', rol: 'encargado' as const, email: null },
+                  { id: DEMO_DUENO_ID, nombre: 'Dueño / Administrador', rol: 'dueno' as const, email: null },
+                ]
+          ).map((u) => ({
+            id: u.id,
+            nombre: u.nombre,
+            rol: u.rol,
+            token: createAuthToken({
+              negocio_id: DEMO_NEGOCIO_ID,
+              usuario_id: u.id,
+              rol: u.rol,
+              ...(u.email ? { email: u.email } : {}),
+            }),
+          }));
+
           return {
             negocioId: DEMO_NEGOCIO_ID,
-            negocioNombre: 'Ferretería El Tornillo',
+            negocioNombre: neg?.nombre ?? 'Ferretería El Tornillo',
             caja: cajaActual,
             cajas: todasLasCajas,
             mediosPago: medios.filter((m) => m.activo),
             rubros,
             categorias: categorias.filter((c) => c.tipo === 'egreso'),
             turnoAbiertoId,
-            operadores: [
-              {
-                id: DEMO_CAJERO_ID,
-                nombre: 'Juan (Cajero)',
-                rol: 'cajero' as const,
-                token: createAuthToken({
-                  negocio_id: DEMO_NEGOCIO_ID,
-                  usuario_id: DEMO_CAJERO_ID,
-                  rol: 'cajero',
-                }),
-              },
-              {
-                id: DEMO_ENCARGADO_ID,
-                nombre: 'Marta (Encargada)',
-                rol: 'encargado' as const,
-                token: createAuthToken({
-                  negocio_id: DEMO_NEGOCIO_ID,
-                  usuario_id: DEMO_ENCARGADO_ID,
-                  rol: 'encargado',
-                }),
-              },
-              {
-                id: DEMO_DUENO_ID,
-                nombre: 'Roberto (Dueño)',
-                rol: 'dueno' as const,
-                token: createAuthToken({
-                  negocio_id: DEMO_NEGOCIO_ID,
-                  usuario_id: DEMO_DUENO_ID,
-                  rol: 'dueno',
-                }),
-              },
-            ],
+            operadores,
           };
         },
       );

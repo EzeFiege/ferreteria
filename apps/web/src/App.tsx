@@ -219,19 +219,19 @@ const CONTEXTO_FALLBACK: ContextoMostrador = {
   operadores: [
     {
       id: '10000000-0000-4000-8000-000000000004',
-      nombre: 'Juan (Cajero)',
+      nombre: 'Cajero/a',
       rol: 'cajero',
       token: 'demo-token-cajero',
     },
     {
       id: '10000000-0000-4000-8000-000000000005',
-      nombre: 'Marta (Encargada)',
+      nombre: 'Encargado/a',
       rol: 'encargado',
       token: 'demo-token-encargado',
     },
     {
       id: '10000000-0000-4000-8000-000000000006',
-      nombre: 'Roberto (Dueño)',
+      nombre: 'Dueño / Administrador',
       rol: 'dueno',
       token: 'demo-token-dueno',
     },
@@ -378,6 +378,44 @@ export function App(): ReactElement {
         return;
       }
       const data = (await res.json()) as ContextoMostrador;
+      setOperadorActivo((prev) => {
+        if (!prev) {
+          const primero = data.operadores[0] ?? null;
+          if (primero) {
+            try {
+              localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
+            } catch {
+              // Ignora
+            }
+          }
+          return primero;
+        }
+        const coincidePorId = data.operadores.find((o) => o.id === prev.id);
+        if (coincidePorId) {
+          try {
+            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorId));
+          } catch {
+            // Ignora
+          }
+          return coincidePorId;
+        }
+        const coincidePorRol = data.operadores.find((o) => o.rol === prev.rol);
+        if (coincidePorRol) {
+          try {
+            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorRol));
+          } catch {
+            // Ignora
+          }
+          return coincidePorRol;
+        }
+        const primero = data.operadores[0] ?? prev;
+        try {
+          localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
+        } catch {
+          // Ignora
+        }
+        return primero;
+      });
       setContexto(data);
     } catch {
       // Mantiene el contexto local si está sin conexión
@@ -415,6 +453,44 @@ export function App(): ReactElement {
           return;
         }
         const data = (await res.json()) as ContextoMostrador;
+      setOperadorActivo((prev) => {
+        if (!prev) {
+          const primero = data.operadores[0] ?? null;
+          if (primero) {
+            try {
+              localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
+            } catch {
+              // Ignora
+            }
+          }
+          return primero;
+        }
+        const coincidePorId = data.operadores.find((o) => o.id === prev.id);
+        if (coincidePorId) {
+          try {
+            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorId));
+          } catch {
+            // Ignora
+          }
+          return coincidePorId;
+        }
+        const coincidePorRol = data.operadores.find((o) => o.rol === prev.rol);
+        if (coincidePorRol) {
+          try {
+            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorRol));
+          } catch {
+            // Ignora
+          }
+          return coincidePorRol;
+        }
+        const primero = data.operadores[0] ?? prev;
+        try {
+          localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
+        } catch {
+          // Ignora
+        }
+        return primero;
+      });
         setContexto(data);
 
         const medioEfectivo =
@@ -1849,6 +1925,11 @@ export function App(): ReactElement {
                 );
                 if (encontrado) {
                   setOperadorActivo(encontrado);
+                  try {
+                    localStorage.setItem('ferreteria_sesion', JSON.stringify(encontrado));
+                  } catch {
+                    // Ignora
+                  }
                 }
               }}
               className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white border border-slate-700"
@@ -2227,6 +2308,11 @@ export function App(): ReactElement {
               );
               if (enc) {
                 setOperadorActivo(enc);
+                try {
+                  localStorage.setItem('ferreteria_sesion', JSON.stringify(enc));
+                } catch {
+                  // Ignora
+                }
               }
             }}
           />
@@ -2241,6 +2327,11 @@ export function App(): ReactElement {
               const dueno = contexto.operadores.find((o) => o.rol === 'dueno');
               if (dueno) {
                 setOperadorActivo(dueno);
+                try {
+                  localStorage.setItem('ferreteria_sesion', JSON.stringify(dueno));
+                } catch {
+                  // Ignora
+                }
               }
             }}
             onCatalogosActualizados={recargarContextoMostrador}
@@ -3032,11 +3123,16 @@ export function App(): ReactElement {
                     );
                     if (enc) {
                       setOperadorActivo(enc);
+                try {
+                  localStorage.setItem('ferreteria_sesion', JSON.stringify(enc));
+                } catch {
+                  // Ignora
+                }
                     }
                   }}
                   className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 border border-amber-300"
                 >
-                  Autorizar como Encargado ({contexto.operadores[1]?.nombre})
+                  Autorizar como Encargado ({contexto.operadores.find((o) => o.rol === 'encargado')?.nombre ?? 'Encargado'})
                 </button>
               )}
             </div>
