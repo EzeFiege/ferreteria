@@ -743,3 +743,43 @@ export const itemHojaRuta = pgTable('item_hoja_ruta', {
   entregadoEn: timestamp('entregado_en', { withTimezone: true }),
   observacionesEntrega: text('observaciones_entrega'),
 });
+
+export const deposito = pgTable('deposito', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  nombre: text('nombre').notNull(),
+  codigo: text('codigo').notNull(),
+  direccion: text('direccion'),
+  esPrincipal: boolean('es_principal').notNull().default(false),
+  activo: boolean('activo').notNull().default(true),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const transferenciaStock = pgTable('transferencia_stock', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  numero: text('numero').notNull(),
+  depositoOrigenId: uuid('deposito_origen_id').notNull(),
+  depositoDestinoId: uuid('deposito_destino_id').notNull(),
+  estado: text('estado')
+    .$type<'pendiente' | 'en_transito' | 'completada' | 'cancelada'>()
+    .notNull()
+    .default('completada'),
+  motivo: text('motivo'),
+  observaciones: text('observaciones'),
+  creadoPor: uuid('creado_por').notNull(),
+  recibidoPor: uuid('recibido_por'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  completadoEn: timestamp('completado_en', { withTimezone: true }),
+});
+
+export const itemTransferenciaStock = pgTable('item_transferencia_stock', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  transferenciaId: uuid('transferencia_id').notNull(),
+  productoId: uuid('producto_id').notNull(),
+  cantidad: numeric('cantidad', { precision: 14, scale: 3 }).notNull(),
+  unidad: text('unidad').notNull(),
+  cantidadBase: numeric('cantidad_base', { precision: 14, scale: 3 }).notNull(),
+  notas: text('notas'),
+});

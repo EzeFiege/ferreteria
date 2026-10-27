@@ -24,6 +24,8 @@ const ACCIONES_LABELS: Record<AccionAuditoria, { label: string; color: string }>
   asiento_manual: { label: 'Asiento Contable Manual', color: 'bg-slate-100 text-slate-800 border-slate-300' },
   crear_acopio: { label: 'Nuevo Acopio Materiales', color: 'bg-amber-100 text-amber-800 border-amber-300' },
   entrega_acopio: { label: 'Remito Entrega Acopio', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  crear_deposito: { label: 'Creación de Depósito', color: 'bg-cyan-100 text-cyan-800 border-cyan-300' },
+  crear_transferencia_stock: { label: 'Transferencia de Stock', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
 };
 
 function detalleString(val: unknown, fallback = ''): string {

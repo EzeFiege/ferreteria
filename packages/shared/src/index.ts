@@ -828,6 +828,8 @@ export const accionAuditoriaSchema = z.enum([
   'asiento_manual',
   'crear_acopio',
   'entrega_acopio',
+  'crear_deposito',
+  'crear_transferencia_stock',
 ]);
 export type AccionAuditoria = z.infer<typeof accionAuditoriaSchema>;
 
@@ -841,6 +843,8 @@ export const entidadAuditoriaSchema = z.enum([
   'cheque',
   'asiento_contable',
   'acopio',
+  'deposito',
+  'transferencia_stock',
 ]);
 export type EntidadAuditoria = z.infer<typeof entidadAuditoriaSchema>;
 
@@ -1884,4 +1888,120 @@ export function formatearMensajeOrdenCompra(datos: DatosMensajeWhatsAppOrdenComp
   msg += `Le adjuntamos el pedido de compra *#${datos.numeroOrden}* con un total de *${datos.cantidadArticulos}* ítems solicitados.\n\n`;
   msg += `Agradecemos confirmación de stock, plazos de entrega y factura correspondiente.\n¡Muchas gracias!`;
   return msg;
+}
+
+// ============================================================================
+// Fase 22: Múltiples Depósitos y Transferencias Internas de Stock
+// ============================================================================
+
+export const estadoTransferenciaStockSchema = z.enum([
+  'pendiente',
+  'en_transito',
+  'completada',
+  'cancelada',
+]);
+export type EstadoTransferenciaStock = z.infer<typeof estadoTransferenciaStockSchema>;
+
+export const crearDepositoSchema = z.object({
+  nombre: z.string().min(1, 'El nombre del depósito es obligatorio'),
+  codigo: z.string().min(1, 'El código del depósito es obligatorio'),
+  direccion: z.string().optional().nullable(),
+  esPrincipal: z.boolean().optional().default(false),
+});
+export type CrearDepositoInput = z.infer<typeof crearDepositoSchema>;
+
+export const actualizarDepositoSchema = z.object({
+  nombre: z.string().min(1).optional(),
+  direccion: z.string().optional().nullable(),
+  esPrincipal: z.boolean().optional(),
+  activo: z.boolean().optional(),
+});
+export type ActualizarDepositoInput = z.infer<typeof actualizarDepositoSchema>;
+
+export const itemTransferenciaInputSchema = z.object({
+  productoId: z.string().uuid('ID de producto inválido'),
+  cantidad: cantidadDecimalSchema,
+  unidad: z.string().min(1),
+  cantidadBase: cantidadDecimalSchema,
+  notas: z.string().optional().nullable(),
+});
+export type ItemTransferenciaInput = z.infer<typeof itemTransferenciaInputSchema>;
+
+export const crearTransferenciaStockSchema = z
+  .object({
+    depositoOrigenId: z.string().uuid('Depósito de origen requerido'),
+    depositoDestinoId: z.string().uuid('Depósito de destino requerido'),
+    motivo: z.string().optional().nullable(),
+    observaciones: z.string().optional().nullable(),
+    items: z.array(itemTransferenciaInputSchema).min(1, 'Debe incluir al menos un artículo a transferir'),
+  })
+  .refine((data) => data.depositoOrigenId !== data.depositoDestinoId, {
+    message: 'El depósito de origen y destino no pueden ser el mismo',
+    path: ['depositoDestinoId'],
+  });
+export type CrearTransferenciaStockInput = z.infer<typeof crearTransferenciaStockSchema>;
+
+export interface DepositoItem {
+  id: string;
+  nombre: string;
+  codigo: string;
+  direccion: string | null;
+  esPrincipal: boolean;
+  activo: boolean;
+  creadoEn: string;
+}
+
+export interface StockPorDepositoItem {
+  productoId: string;
+  productoCodigo: string;
+  productoNombre: string;
+  productoMarca: string | null;
+  unidadPrincipal: string;
+  depositoId: string;
+  depositoCodigo: string;
+  depositoNombre: string;
+  stockActualBase: string;
+}
+
+export interface TransferenciaStockResumen {
+  id: string;
+  numero: string;
+  depositoOrigenId: string;
+  depositoOrigenNombre: string;
+  depositoDestinoId: string;
+  depositoDestinoNombre: string;
+  estado: EstadoTransferenciaStock;
+  motivo: string | null;
+  observaciones: string | null;
+  creadoPor: string;
+  creadoEn: string;
+  completadoEn: string | null;
+  totalArticulos: number;
+}
+
+export interface ItemTransferenciaStockDetalle {
+  id: string;
+  productoId: string;
+  productoCodigo: string;
+  productoNombre: string;
+  cantidad: string;
+  unidad: string;
+  cantidadBase: string;
+  notas: string | null;
+}
+
+export interface TransferenciaStockCompleta {
+  id: string;
+  numero: string;
+  depositoOrigenId: string;
+  depositoOrigenNombre: string;
+  depositoDestinoId: string;
+  depositoDestinoNombre: string;
+  estado: EstadoTransferenciaStock;
+  motivo: string | null;
+  observaciones: string | null;
+  creadoPor: string;
+  creadoEn: string;
+  completadoEn: string | null;
+  items: ItemTransferenciaStockDetalle[];
 }

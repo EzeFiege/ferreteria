@@ -31,6 +31,7 @@ import { Contabilidad } from './Contabilidad.js';
 import { Presupuestos } from './Presupuestos.js';
 import { AcopiosMateriales } from './AcopiosMateriales.js';
 import { LogisticaDespachos } from './LogisticaDespachos.js';
+import { DepositosTransferencias } from './DepositosTransferencias.js';
 import { AuditoriaSistema } from './AuditoriaSistema.js';
 import { InicioDashboard } from './InicioDashboard.js';
 import {
@@ -313,6 +314,7 @@ export function App(): ReactElement {
     | 'auditoria'
     | 'acopios'
     | 'logistica'
+    | 'depositos'
   >('inicio');
   const [sidebarAbierto, setSidebarAbierto] = useState<boolean>(false);
 
@@ -1556,7 +1558,24 @@ export function App(): ReactElement {
                 <span>Artículos y Stock</span>
               </button>
 
-              <button
+                            <button
+                type="button"
+                data-testid="tab-depositos"
+                onClick={() => {
+                  setPestana('depositos');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'depositos'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🏢</span>
+                <span>Depósitos y Transferencias</span>
+              </button>
+
+<button
                 type="button"
                 data-testid="tab-inventario"
                 onClick={() => {
@@ -2156,6 +2175,13 @@ export function App(): ReactElement {
                 void cargarResumenTurno(turnoId, operadorActivo.token);
               }
             }}
+          />
+        )}
+
+        {pestana === 'depositos' && (
+          <DepositosTransferencias
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
           />
         )}
 

@@ -760,3 +760,42 @@ Estado:
   - `pnpm lint` con cero advertencias y cero errores.
   - Suite completa de integración: **20 archivos de prueba, 111 tests pasando al 100%** en PostgreSQL real con Testcontainers.
   - Compilación de producción con Vite (`pnpm build`) exitosa.
+
+---
+
+## Fase 22 — Múltiples Depósitos y Transferencias Internas de Stock (Completada ✅)
+
+Objetivo: permitir a ferreterías y corralones administrar múltiples ubicaciones físicas de almacenamiento (salón comercial, trastienda, galpones y patios de corralón), consultar el stock segregado por depósito y registrar transferencias internas con impacto atómico e inmutable en el Kardex de movimientos de stock.
+
+Estado:
+- [x] Migración SQL `db/migrations/020_multiples_depositos_transferencias.sql`:
+  - Tabla `deposito` con clave compuesta `(id, negocio_id)`, `es_principal` y políticas RLS.
+  - Tabla `transferencia_stock` y tabla `item_transferencia_stock` con referencias foráneas compuestas y control de depósitos distintos (`origen <> destino`).
+  - Columna `deposito_id` agregada a `movimiento_stock` y actualización de `movimiento_stock_tipo_check` para soportar `'transferencia_origen'` y `'transferencia_destino'`.
+  - Vista agregada `v_stock_por_deposito` con `with (security_invoker = true)` para cálculo en tiempo real de inventario por ubicación física.
+  - Actualización de función `sembrar_negocio` para inicializar el depósito principal predeterminado.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `crearDepositoSchema`, `actualizarDepositoSchema`, `crearTransferenciaStockSchema`, `itemTransferenciaInputSchema`.
+  - Tipos e interfaces: `DepositoItem`, `StockPorDepositoItem`, `TransferenciaStockResumen`, `TransferenciaStockCompleta`.
+  - Auditoría integrada: acciones `crear_deposito` y `crear_transferencia_stock`.
+- [x] Backend API (`apps/api/src/routes/depositos.ts`):
+  - `GET /depositos`: listado de depósitos y sucursales.
+  - `POST /depositos`: creación de nuevos depósitos (dueño / encargado) con auditoría inmutable.
+  - `PATCH /depositos/:id`: actualización de datos y asignación de depósito principal.
+  - `GET /depositos/:id/stock`: stock discriminado de artículos por depósito.
+  - `GET /depositos/transferencias`: historial de transferencias internas con resumen de artículos.
+  - `GET /depositos/transferencias/:id`: detalle completo y remito interno de transferencia.
+  - `POST /depositos/transferencias`: procesamiento atómico que registra la cabecera, los ítems y genera simultáneamente los movimientos de salida (`out`) en origen y de entrada (`in`) en destino en `movimiento_stock`.
+  - Suite de integración en `apps/api/src/routes/depositos.test.ts` (4 tests pasando al 100%).
+- [x] Frontend Web (`apps/web`):
+  - Componente completo `apps/web/src/DepositosTransferencias.tsx`:
+    - Tab 1 (Stock por Depósito): selector dinámico de ubicación (Salón, Galpón, Patio), buscador instantáneo y tabla con semáforo de inventario disponible.
+    - Tab 2 (Transferencias Internas): historial correlativo (`TRF-XXXX`), modal de nueva transferencia con selector de origen/destino y buscador de artículos con cantidades fraccionables, y modal de detalle para visualizar e imprimir el remito interno.
+    - Tab 3 (Sucursales y Galpones): administración de puntos de venta/almacén con creación y edición rápida.
+  - Integración en navegación lateral y renderizado de `apps/web/src/App.tsx` (`tab-depositos`).
+  - Actualización de etiquetas de auditoría en `AuditoriaSistema.tsx`.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero advertencias y cero errores.
+  - Suite completa de integración: **21 archivos de prueba, 115 tests pasando al 100%** en PostgreSQL real con Testcontainers.
+  - Compilación de producción con Vite (`pnpm build`) exitosa.
