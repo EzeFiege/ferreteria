@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { formatearPesos } from './App.js';
+import { formatearMensajePresupuesto, generarLinkWhatsApp } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { exportarACSV } from './utils/exportar-csv.js';
 import type {
@@ -1072,6 +1073,24 @@ export function Presupuestos({
                 </button>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="btn-wsp-presupuesto"
+                    onClick={() => {
+                                            const msg = formatearMensajePresupuesto({
+                        nombreNegocio: 'Ferretería & Corralón',
+                        nombreCliente: presupuestoSeleccionado.nombreContacto,
+                        numeroPresupuesto: presupuestoSeleccionado.numero.toString().padStart(5, '0'),
+                        totalPesos: formatearPesos(presupuestoSeleccionado.total),
+                        diasValidez: presupuestoSeleccionado.diasValidez,
+                      });
+                      const link = generarLinkWhatsApp(presupuestoSeleccionado.telefonoContacto ?? '', msg);
+                      window.open(link, '_blank');
+                    }}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 flex items-center gap-1.5"
+                  >
+                    <span>📲</span> WhatsApp
+                  </button>
                   <button
                     type="button"
                     onClick={() => {

@@ -5,7 +5,14 @@ import {
   cantidadDecimalSchema,
   deCentavos,
   evaluarDescuentoVolumen,
+  formatearMensajeCtaCte,
+  formatearMensajeDespacho,
+  formatearMensajeOrdenCompra,
+  formatearMensajePresupuesto,
+  formatearMensajeTicket,
+  generarLinkWhatsApp,
   montoDecimalSchema,
+  normalizarTelefonoWhatsApp,
   registrarVentaSchema,
   rolUsuarioSchema,
   sumarMontos,
@@ -154,5 +161,81 @@ describe('@ferreteria/shared schemas y aritmética de dinero', () => {
     // múltiplo de $100
     expect(aplicarRedondeoPrecio('1240.00', 'multiplo_100')).toBe('1200.00');
     expect(aplicarRedondeoPrecio('1250.00', 'multiplo_100')).toBe('1300.00');
+  });
+
+  it('Fase 21: normaliza teléfonos argentinos y genera enlaces wa.me con mensajes formateados', () => {
+    // 1. Normalización de formatos argentinos comunes
+    expect(normalizarTelefonoWhatsApp('11 4567-8901')).toBe('5491145678901');
+    expect(normalizarTelefonoWhatsApp('011 15 4567 8901')).toBe('5491145678901');
+    expect(normalizarTelefonoWhatsApp('+54 9 11 4567-8901')).toBe('5491145678901');
+    expect(normalizarTelefonoWhatsApp('221 456-7890')).toBe('5492214567890');
+    expect(normalizarTelefonoWhatsApp('0341 15 1234567')).toBe('5493411234567');
+
+    // 2. Generación de enlaces wa.me
+    const linkConTel = generarLinkWhatsApp('11 4567-8901', 'Hola Mundo');
+    expect(linkConTel).toBe('https://wa.me/5491145678901?text=Hola%20Mundo');
+
+    const linkSinTel = generarLinkWhatsApp('', 'Mensaje general');
+    expect(linkSinTel).toBe('https://wa.me/?text=Mensaje%20general');
+
+    // 3. Formateo de Ticket de Venta
+    const msgTicket = formatearMensajeTicket({
+      nombreNegocio: 'Ferretería Central',
+      nombreCliente: 'Juan Pérez',
+      numeroTicket: 1042,
+      totalPesos: '$ 15.200,00',
+      medioCobro: 'Efectivo',
+      cantidadArticulos: 3,
+    });
+    expect(msgTicket).toContain('Juan Pérez');
+    expect(msgTicket).toContain('Ferretería Central');
+    expect(msgTicket).toContain('#1042');
+    expect(msgTicket).toContain('$ 15.200,00');
+
+    // 4. Formateo de Cuenta Corriente
+    const msgCtaCte = formatearMensajeCtaCte({
+      nombreNegocio: 'Ferretería Central',
+      nombreCliente: 'Construcciones SRL',
+      saldoPesos: '$ 84.500,00',
+      aliasCbu: 'ferreteria.central.pagos',
+    });
+    expect(msgCtaCte).toContain('Construcciones SRL');
+    expect(msgCtaCte).toContain('$ 84.500,00');
+    expect(msgCtaCte).toContain('ferreteria.central.pagos');
+
+    // 5. Formateo de Presupuesto
+    const msgPresupuesto = formatearMensajePresupuesto({
+      nombreNegocio: 'Ferretería Central',
+      nombreCliente: 'Martín',
+      numeroPresupuesto: 'PRE-0025',
+      totalPesos: '$ 45.000,00',
+      diasValidez: 7,
+    });
+    expect(msgPresupuesto).toContain('PRE-0025');
+    expect(msgPresupuesto).toContain('7 días');
+
+    // 6. Formateo de Despacho Logístico
+    const msgDespacho = formatearMensajeDespacho({
+      nombreNegocio: 'Ferretería Central',
+      nombreCliente: 'Carlos Gómez',
+      numeroDespacho: 'DESP-0001',
+      direccionDestino: 'Av. Belgrano 1234',
+      fleteroNombre: 'Roberto',
+      fleteroTelefono: '11 9988-7766',
+    });
+    expect(msgDespacho).toContain('DESP-0001');
+    expect(msgDespacho).toContain('Roberto');
+    expect(msgDespacho).toContain('Av. Belgrano 1234');
+
+    // 7. Formateo de Pedido a Proveedor
+    const msgProveedor = formatearMensajeOrdenCompra({
+      nombreNegocio: 'Ferretería Central',
+      nombreProveedor: 'Bulonera Argentina',
+      numeroOrden: 'OC-0099',
+      cantidadArticulos: 12,
+    });
+    expect(msgProveedor).toContain('Bulonera Argentina');
+    expect(msgProveedor).toContain('OC-0099');
+    expect(msgProveedor).toContain('12');
   });
 });

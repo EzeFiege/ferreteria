@@ -1707,3 +1707,181 @@ export interface HojaRutaDetalleCompleto {
   paradasEntregadas: number;
   paradas: ItemHojaRutaDetalle[];
 }
+
+// ============================================================================
+// Enlaces y Formateo para Mensajería WhatsApp
+// ============================================================================
+
+/**
+ * Normaliza un número telefónico a formato internacional E.164 sin '+' para wa.me.
+ * Limpia espacios, paréntesis, guiones y barras.
+ * Soporta números de Argentina (prefijos 0, 15, o directos de 10 dígitos -> 549...).
+ */
+export function normalizarTelefonoWhatsApp(telefono: string): string {
+  let digitos = telefono.replace(/\D/g, '');
+
+  if (!digitos) return '';
+
+  if (digitos.startsWith('00')) {
+    digitos = digitos.slice(2);
+  }
+
+  if (digitos.startsWith('54')) {
+    if (digitos.startsWith('549')) {
+      return digitos;
+    }
+    if (digitos.startsWith('540')) {
+      digitos = '54' + digitos.slice(3);
+    }
+    return '549' + digitos.slice(2);
+  }
+
+  if (digitos.startsWith('0')) {
+    digitos = digitos.slice(1);
+  }
+
+  // Quita el prefijo '15' típico de móviles argentinos: área (2 a 4 dígitos) + 15 + local (6 a 8 dígitos)
+  const match15 = digitos.match(/^(\d{2,4})15(\d{6,8})$/);
+  if (match15 && match15[1] && match15[2]) {
+    digitos = match15[1] + match15[2];
+  }
+
+  if (digitos.length === 10) {
+    return '549' + digitos;
+  }
+
+  if (digitos.length >= 8 && digitos.length <= 11) {
+    return '549' + digitos;
+  }
+
+  return digitos;
+}
+
+/**
+ * Genera el enlace wa.me para abrir WhatsApp Web o la App móvil
+ */
+export function generarLinkWhatsApp(telefono: string, mensaje: string): string {
+  const telLimpio = normalizarTelefonoWhatsApp(telefono);
+  const textoCodificado = encodeURIComponent(mensaje);
+  if (!telLimpio) {
+    return `https://wa.me/?text=${textoCodificado}`;
+  }
+  return `https://wa.me/${telLimpio}?text=${textoCodificado}`;
+}
+
+export interface DatosMensajeWhatsAppTicket {
+  nombreNegocio: string;
+  nombreCliente?: string | null;
+  numeroTicket: string | number;
+  totalPesos: string;
+  medioCobro?: string | null;
+  cantidadArticulos?: number;
+  piePersonalizado?: string;
+}
+
+export function formatearMensajeTicket(datos: DatosMensajeWhatsAppTicket): string {
+  const cliente =
+    datos.nombreCliente && datos.nombreCliente.trim().toLowerCase() !== 'consumidor final'
+      ? `Hola *${datos.nombreCliente.trim()}*`
+      : '¡Hola!';
+
+  let msg = `${cliente}, te enviamos el comprobante de tu compra en *${datos.nombreNegocio.trim()}* 🛠️\n\n`;
+  msg += `🧾 *Comprobante #${datos.numeroTicket}*\n`;
+  if (datos.cantidadArticulos) {
+    msg += `📦 Artículos: *${datos.cantidadArticulos}*\n`;
+  }
+  if (datos.medioCobro) {
+    msg += `💳 Pago: *${datos.medioCobro}*\n`;
+  }
+  msg += `💵 Total: *${datos.totalPesos}*\n\n`;
+  if (datos.piePersonalizado) {
+    msg += `${datos.piePersonalizado}\n\n`;
+  }
+  msg += '¡Muchas gracias por elegirnos!';
+  return msg;
+}
+
+export interface DatosMensajeWhatsAppCtaCte {
+  nombreNegocio: string;
+  nombreCliente: string;
+  saldoPesos: string;
+  limitePesos?: string | null;
+  aliasCbu?: string | null;
+  cbu?: string | null;
+}
+
+export function formatearMensajeCtaCte(datos: DatosMensajeWhatsAppCtaCte): string {
+  let msg = `Hola *${datos.nombreCliente.trim()}*, te escribimos de *${datos.nombreNegocio.trim()}* 📋\n\n`;
+  msg += `Te compartimos el estado actualizado de tu cuenta corriente:\n`;
+  msg += `💰 Saldo pendiente: *${datos.saldoPesos}*\n`;
+  if (datos.limitePesos) {
+    msg += `📊 Límite de crédito asignado: *${datos.limitePesos}*\n`;
+  }
+  if (datos.aliasCbu || datos.cbu) {
+    msg += `\n*Datos para transferencia:*\n`;
+    if (datos.aliasCbu) msg += `🔹 Alias: *${datos.aliasCbu}*\n`;
+    if (datos.cbu) msg += `🔹 CBU: *${datos.cbu}*\n`;
+  }
+  msg += `\nAnte cualquier consulta o para enviarnos el comprobante de pago, podés responder por este medio.\n¡Saludos cordiales!`;
+  return msg;
+}
+
+export interface DatosMensajeWhatsAppPresupuesto {
+  nombreNegocio: string;
+  nombreCliente?: string | null;
+  numeroPresupuesto: string;
+  totalPesos: string;
+  diasValidez: number;
+}
+
+export function formatearMensajePresupuesto(datos: DatosMensajeWhatsAppPresupuesto): string {
+  const cliente = datos.nombreCliente ? `Hola *${datos.nombreCliente.trim()}*` : '¡Hola!';
+  let msg = `${cliente}, te enviamos el presupuesto solicitado en *${datos.nombreNegocio.trim()}* 📄\n\n`;
+  msg += `📋 *Presupuesto #${datos.numeroPresupuesto}*\n`;
+  msg += `💵 Total: *${datos.totalPesos}*\n`;
+  msg += `⏳ Validez: *${datos.diasValidez} días*\n\n`;
+  msg += `Quedamos a tu entera disposición por cualquier duda o para coordinar la entrega.\n¡Muchas gracias!`;
+  return msg;
+}
+
+export interface DatosMensajeWhatsAppDespacho {
+  nombreNegocio: string;
+  nombreCliente: string;
+  numeroDespacho: string;
+  direccionDestino: string;
+  fleteroNombre?: string | null;
+  fleteroTelefono?: string | null;
+  cobroEnDestinoPesos?: string | null;
+}
+
+export function formatearMensajeDespacho(datos: DatosMensajeWhatsAppDespacho): string {
+  let msg = `Hola *${datos.nombreCliente.trim()}*, te avisamos de *${datos.nombreNegocio.trim()}* que tu pedido está en camino 🚚💨\n\n`;
+  msg += `📦 *Despacho #${datos.numeroDespacho}*\n`;
+  msg += `📍 Destino: *${datos.direccionDestino}*\n`;
+  if (datos.fleteroNombre) {
+    msg += `👤 Fletero asignado: *${datos.fleteroNombre}*`;
+    if (datos.fleteroTelefono) {
+      msg += ` (Tel: ${datos.fleteroTelefono})`;
+    }
+    msg += `\n`;
+  }
+  if (datos.cobroEnDestinoPesos) {
+    msg += `💵 Importe a abonar en destino: *${datos.cobroEnDestinoPesos}*\n`;
+  }
+  msg += `\nTe solicitamos tener personal disponible para la recepción y descarga.\n¡Muchas gracias!`;
+  return msg;
+}
+
+export interface DatosMensajeWhatsAppOrdenCompra {
+  nombreNegocio: string;
+  nombreProveedor: string;
+  numeroOrden: string;
+  cantidadArticulos: number;
+}
+
+export function formatearMensajeOrdenCompra(datos: DatosMensajeWhatsAppOrdenCompra): string {
+  let msg = `Hola estimado/a *${datos.nombreProveedor.trim()}*, le escribimos de *${datos.nombreNegocio.trim()}* 📦\n\n`;
+  msg += `Le adjuntamos el pedido de compra *#${datos.numeroOrden}* con un total de *${datos.cantidadArticulos}* ítems solicitados.\n\n`;
+  msg += `Agradecemos confirmación de stock, plazos de entrega y factura correspondiente.\n¡Muchas gracias!`;
+  return msg;
+}

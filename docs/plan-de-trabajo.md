@@ -731,3 +731,32 @@ Estado:
   - `pnpm lint` con cero advertencias y cero errores.
   - Suite completa de integración: **20 archivos de prueba, 110 tests pasando al 100%** en PostgreSQL real con Testcontainers.
   - Compilación de producción con Vite (`pnpm build`) exitosa.
+
+---
+
+## Fase 21 — Enlaces Directos de WhatsApp para Comprobantes y Cobranzas (Completada ✅)
+
+Objetivo: permitir el envío inmediato con un solo clic de tickets de venta, estados de cuenta corriente con saldo deudor y datos de CBU/Alias para transferencia, presupuestos cotizados, avisos de envío logístico en camino con datos del chofer y órdenes de compra a proveedores mediante la API oficial de enlaces `wa.me`, con normalización automática de números telefónicos de Argentina.
+
+Estado:
+- [x] Lógica de normalización y formateo en `packages/shared`:
+  - `normalizarTelefonoWhatsApp(telefono)`: limpieza de caracteres especiales, remoción de prefijos `0` y `15` en celulares de AMBA y todas las provincias argentinas, e incorporación automática del código de país `549`.
+  - `generarLinkWhatsApp(telefono, mensaje)`: construcción de URL `https://wa.me/...` con parámetros URL encoded seguros.
+  - Generadores de plantillas rioplatenses personalizadas:
+    - `formatearMensajeTicket`: saludo al cliente, detalle de comprobante, medio de pago y total en pesos.
+    - `formatearMensajeCtaCte`: extracto de saldo deudor, límite de crédito y datos bancarios para transferencia (Alias/CBU).
+    - `formatearMensajePresupuesto`: detalle de cotización, monto y plazo de validez en días.
+    - `formatearMensajeDespacho`: notificación de pedido en camino, dirección de destino, chofer/fletero asignado y cobro contraentrega si aplica.
+    - `formatearMensajeOrdenCompra`: solicitud formal de compra enviada al proveedor con cantidad de artículos.
+  - Suite de pruebas unitarias en `packages/shared/src/index.test.ts` (8 tests pasando al 100%).
+- [x] Integración en el Frontend (`apps/web`):
+  - `App.tsx`: botón `[📲 WhatsApp]` en el banner de comprobante emitido en mostrador con diálogo de confirmación/ingreso de celular del cliente.
+  - `ClientesCtaCte.tsx`: botón directo `[📲 WhatsApp]` en la tabla de clientes para cuentas con saldo deudor y botón destacado en la ficha de extracto del cliente.
+  - `Presupuestos.tsx`: botón directo `[📲 WhatsApp]` en el modal de detalle del presupuesto para compartir al cliente.
+  - `LogisticaDespachos.tsx`: botón `[📲 Wsp]` en la grilla de despachos para alertar al destinatario sobre su envío.
+  - `ComprasProveedores.tsx`: botón `[📲 WhatsApp]` al lado de la recepción para compartir órdenes de compra al proveedor.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los paquetes.
+  - `pnpm lint` con cero advertencias y cero errores.
+  - Suite completa de integración: **20 archivos de prueba, 111 tests pasando al 100%** en PostgreSQL real con Testcontainers.
+  - Compilación de producción con Vite (`pnpm build`) exitosa.

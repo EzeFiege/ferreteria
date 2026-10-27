@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import {
+  formatearMensajeDespacho,
+  generarLinkWhatsApp,
+} from '@ferreteria/shared';
 import type {
   CrearDespachoEnvioInput,
   CrearHojaRutaInput,
@@ -533,6 +537,29 @@ export function LogisticaDespachos({
                             <span className="text-[10px] text-slate-500">
                               {item.contactoTelefono ?? 'Sin tel.'}
                             </span>
+                            {item.contactoTelefono && (
+                              <button
+                                type="button"
+                                data-testid={`btn-wsp-despacho-${item.numero}`}
+                                onClick={() => {
+                                  const msg = formatearMensajeDespacho({
+                                    nombreNegocio: 'Ferretería & Corralón',
+                                    nombreCliente: item.contactoNombre || item.clienteNombre,
+                                    numeroDespacho: item.numero,
+                                    direccionDestino: item.direccionDestino,
+                                    fleteroNombre: item.fleteroNombre,
+                                    fleteroTelefono: null,
+                                    cobroEnDestinoPesos: parseFloat(item.costoFlete) > 0 ? formatearPesos(item.costoFlete) : null,
+                                  });
+                                  const link = generarLinkWhatsApp(item.contactoTelefono ?? '', msg);
+                                  window.open(link, '_blank');
+                                }}
+                                className="ml-1.5 inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                                title="Avisar despacho por WhatsApp"
+                              >
+                                📲 Wsp
+                              </button>
+                            )}
                           </td>
                           <td className="p-3 text-slate-500">{item.franjaHoraria ?? '-'}</td>
                           <td className="p-3 text-right font-black text-slate-900">

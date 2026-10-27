@@ -3,7 +3,7 @@ import {
   formatearPesos,
 } from './App.js';
 import { apiUrl } from './api-url.js';
-import type { CondicionIva, RolUsuario } from '@ferreteria/shared';
+import { formatearMensajeCtaCte, generarLinkWhatsApp, type CondicionIva, type RolUsuario } from '@ferreteria/shared';
 
 export interface ClienteItem {
   id: string;
@@ -669,6 +669,26 @@ export function ClientesCtaCte({
                           >
                             Cobrar
                           </button>
+                          {tieneDeuda && (
+                            <button
+                              type="button"
+                              data-testid={`btn-wsp-cta-${c.codigo}`}
+                              onClick={() => {
+                                const msg = formatearMensajeCtaCte({
+                                  nombreNegocio: 'Ferretería & Corralón',
+                                  nombreCliente: c.nombre,
+                                  saldoPesos: formatearPesos(c.saldoDeudor),
+                                  limitePesos: parseFloat(c.limiteCredito) > 0 ? formatearPesos(c.limiteCredito) : null,
+                                });
+                                const link = generarLinkWhatsApp(c.telefono ?? '', msg);
+                                window.open(link, '_blank');
+                              }}
+                              className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1"
+                              title="Enviar recordatorio de saldo deudor por WhatsApp"
+                            >
+                              <span>📲</span> WhatsApp
+                            </button>
+                          )}
                           {(rolUsuario === 'encargado' || rolUsuario === 'dueno') && (
                             <button
                               type="button"

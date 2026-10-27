@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactElement, type SyntheticEven
 import { formatearPesos } from './App.js';
 import { apiUrl } from './api-url.js';
 import { ReabastecimientoInteligente } from './ReabastecimientoInteligente.js';
-import type { CondicionIva, RolUsuario } from '@ferreteria/shared';
+import { formatearMensajeOrdenCompra, generarLinkWhatsApp, type CondicionIva, type RolUsuario } from '@ferreteria/shared';
 
 export interface ProveedorItem {
   id: string;
@@ -804,16 +804,38 @@ export function ComprasProveedores({
                       </td>
                       <td className="px-4 py-3 text-center">
                         {oc.estado !== 'recibida' && oc.estado !== 'cancelada' && (
-                          <button
-                            type="button"
-                            data-testid={`btn-recibir-oc-${oc.id}`}
-                            onClick={() => {
-                              abrirModalRecepcion(oc);
-                            }}
-                            className="rounded bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
-                          >
-                            📥 Recibir Mercadería
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              data-testid={`btn-wsp-oc-${oc.id}`}
+                              onClick={() => {
+                                const prov = proveedores.find((p) => p.id === oc.proveedorId);
+                                const tel = prov?.contactoTelefono ?? prov?.telefono ?? '';
+                                const msg = formatearMensajeOrdenCompra({
+                                  nombreNegocio: 'Ferretería & Corralón',
+                                  nombreProveedor: oc.proveedorRazonSocial ?? prov?.razonSocial ?? 'Proveedor',
+                                  numeroOrden: oc.numero,
+                                  cantidadArticulos: oc.items ? oc.items.length : 1,
+                                });
+                                const link = generarLinkWhatsApp(tel, msg);
+                                window.open(link, '_blank');
+                              }}
+                              className="mr-1.5 rounded bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 border border-emerald-200 inline-flex items-center gap-1"
+                              title="Enviar orden de compra por WhatsApp al proveedor"
+                            >
+                              <span>📲</span> WhatsApp
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`btn-recibir-oc-${oc.id}`}
+                              onClick={() => {
+                                abrirModalRecepcion(oc);
+                              }}
+                              className="rounded bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                            >
+                              📥 Recibir Mercadería
+                            </button>
+                          </>
                         )}
                         {oc.estado === 'recibida' && (
                           <span className="text-xs text-emerald-700 font-medium">✓ Ingresada a stock</span>

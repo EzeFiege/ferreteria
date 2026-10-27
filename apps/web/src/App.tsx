@@ -3,6 +3,8 @@ import {
   aCentavos,
   deCentavos,
   evaluarDescuentoVolumen,
+  formatearMensajeTicket,
+  generarLinkWhatsApp,
   type ReglaDescuentoVolumenItem,
   type RolUsuario,
 } from '@ferreteria/shared';
@@ -1990,7 +1992,33 @@ export function App(): ReactElement {
                       </button>
                     </>
                   )}
-                  <button
+                                    <button
+                    type="button"
+                    data-testid="btn-whatsapp-ticket"
+                    onClick={() => {
+                      const telDefault = clienteSeleccionadoVenta?.telefono ?? '';
+                      const telIngresado = window.prompt(
+                        'Ingresá el celular de WhatsApp del cliente (o dejalo vacío para seleccionar contacto en WhatsApp):',
+                        telDefault
+                      );
+                      if (telIngresado !== null) {
+                        const msg = formatearMensajeTicket({
+                          nombreNegocio: ultimaVentaParaTicket.nombreComercio || 'Ferretería & Corralón',
+                          nombreCliente: clienteSeleccionadoVenta?.nombre ?? (ultimaFacturaEmitida?.razonSocialCliente ?? null),
+                          numeroTicket: ultimaFacturaEmitida?.numeroComprobante ?? ultimaVentaParaTicket.numeroTicket,
+                          totalPesos: formatearPesos(ultimaFacturaEmitida ? ultimaFacturaEmitida.total : ultimaVentaParaTicket.total),
+                          medioCobro: ultimaVentaParaTicket.medioCobro,
+                          cantidadArticulos: ultimaVentaParaTicket.items.length,
+                        });
+                        const link = generarLinkWhatsApp(telIngresado, msg);
+                        window.open(link, '_blank');
+                      }
+                    }}
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
+                  >
+                    <span>📲</span> WhatsApp
+                  </button>
+<button
                     type="button"
                     onClick={() => {
                       setUltimaVentaParaTicket(null);
