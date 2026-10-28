@@ -740,6 +740,7 @@ export function App(): ReactElement {
         let productoEncontrado: {
           id: string;
           codigo: string;
+          sku?: string | null | undefined;
           nombre: string;
           costoBase: string;
           stockActualBase?: string | undefined;
@@ -764,6 +765,7 @@ export function App(): ReactElement {
               encontrado: boolean;
               productoId?: string;
               codigo?: string;
+              sku?: string;
               nombre?: string;
               costoBase?: string;
               stockActualBase?: string;
@@ -777,6 +779,7 @@ export function App(): ReactElement {
               productoEncontrado = {
                 id: eanData.productoId,
                 codigo: eanData.codigo ?? query,
+                sku: eanData.sku,
                 nombre: eanData.nombre ?? 'Artículo',
                 costoBase: eanData.costoBase ?? '0.00',
                 stockActualBase: eanData.stockActualBase,
@@ -792,10 +795,10 @@ export function App(): ReactElement {
           // Ignora fallo de lookup-ean
         }
 
-        // 2. Si no es EAN directo, buscar en catálogo por nombre o código interno
+        // 2. Si no es EAN directo, buscar en catálogo por nombre, SKU o código interno
         if (!productoEncontrado) {
           const resCat = await fetch(
-            apiUrl(`/api/productos?busqueda=${encodeURIComponent(query)}`),
+            apiUrl(`/api/productos?q=${encodeURIComponent(query)}`),
             {
               headers: { Authorization: `Bearer ${operadorActivo.token}` },
             },
@@ -804,6 +807,7 @@ export function App(): ReactElement {
             const listData = (await resCat.json()) as Array<{
               id: string;
               codigo: string;
+              sku: string | null;
               nombre: string;
               costo_base: string;
               stock_actual_base: string;
@@ -819,6 +823,7 @@ export function App(): ReactElement {
               productoEncontrado = {
                 id: p.id,
                 codigo: p.codigo,
+                sku: p.sku,
                 nombre: p.nombre,
                 costoBase: p.costo_base,
                 stockActualBase: p.stock_actual_base,

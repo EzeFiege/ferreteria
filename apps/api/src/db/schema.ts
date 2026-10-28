@@ -195,6 +195,7 @@ export const producto = pgTable('producto', {
   negocioId: uuid('negocio_id').notNull(),
   rubroId: uuid('rubro_id'),
   codigo: text('codigo').notNull(),
+  sku: text('sku'),
   nombre: text('nombre').notNull(),
   marca: text('marca'),
   descripcion: text('descripcion'),

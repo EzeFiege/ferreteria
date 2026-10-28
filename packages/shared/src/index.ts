@@ -246,6 +246,7 @@ export const guardarProductoSchema = z.object({
   id: uuidSchema.optional(),
   rubroId: uuidSchema.optional(),
   codigo: z.string().trim().min(1).max(100),
+  sku: z.string().trim().max(100).optional().or(z.literal('')),
   nombre: z.string().trim().min(1).max(255),
   marca: z.string().trim().max(100).optional(),
   descripcion: z.string().max(1000).optional(),
@@ -292,6 +293,7 @@ export const lookupEanCandidatoSchema = z.object({
   nombre: z.string(),
   marca: z.string().optional(),
   rubro: z.string().optional(),
+  sku: z.string().optional(),
   snippet: z.string().optional(),
 });
 export type LookupEanCandidato = z.infer<typeof lookupEanCandidatoSchema>;
@@ -302,6 +304,7 @@ export const lookupEanResultSchema = z.object({
   codigoBarra: z.string(),
   nombre: z.string().optional(),
   marca: z.string().optional(),
+  sku: z.string().optional(),
   imagenUrl: z.string().optional(),
   rubroSugerido: z.string().optional(),
   productoId: uuidSchema.optional(),
@@ -976,6 +979,7 @@ export interface LoginResponse {
 
 export const itemImportacionProductoSchema = z.object({
   codigo: z.string().trim().min(1, 'El código es obligatorio').max(100),
+  sku: z.string().trim().max(100).optional(),
   nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(255),
   marca: z.string().trim().max(100).optional(),
   rubroNombre: z.string().trim().max(100).optional(),

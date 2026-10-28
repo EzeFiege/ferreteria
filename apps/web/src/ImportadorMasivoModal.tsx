@@ -20,6 +20,7 @@ export interface ImportadorMasivoModalProps {
 interface ItemPrevisualizacion {
   fila: number;
   codigo: string;
+  sku?: string | undefined;
   nombre: string;
   marca?: string | undefined;
   rubroNombre?: string | undefined;
@@ -59,6 +60,7 @@ export function ImportadorMasivoModal({
   const descargarPlantilla = (): void => {
     const encabezados = [
       'codigo',
+      'sku',
       'nombre',
       'marca',
       'rubro',
@@ -71,10 +73,10 @@ export function ImportadorMasivoModal({
     ].join(';');
 
     const filasEjemplo = [
-      'TAR-FIS-8;Tarugo Fischer SX 8mm x 100u;Fischer;Fijaciones;2500.00;4000.00;caja;5.000;20.000;7791234560011',
-      'PIN-LAT-4L;Pintura Látex Interior Blanco 4L;Alba;Pinturas;18500.00;29600.00;un;3.000;12.000;7791234560028',
-      'DIS-COR-115;Disco de corte fino 115 x 1.6mm;Norton;Herramientas;950.00;1520.00;un;20.000;100.000;7791234560035',
-      'CAB-TPR-25;Cable Taller Bipolar 2x2.5mm x 100m;Pirelli;Electricidad;42000.00;67200.00;rollo;2.000;15.000;7791234560042',
+      'TAR-FIS-8;SX-8;Tarugo Fischer SX 8mm x 100u;Fischer;Fijaciones;2500.00;4000.00;caja;5.000;20.000;7791234560011',
+      'PIN-LAT-4L;ALB-04L;Pintura Látex Interior Blanco 4L;Alba;Pinturas;18500.00;29600.00;un;3.000;12.000;7791234560028',
+      'DIS-COR-115;NOR-115;Disco de corte fino 115 x 1.6mm;Norton;Herramientas;950.00;1520.00;un;20.000;100.000;7791234560035',
+      'CAB-TPR-25;PIR-225;Cable Taller Bipolar 2x2.5mm x 100m;Pirelli;Electricidad;42000.00;67200.00;rollo;2.000;15.000;7791234560042',
     ];
 
     const contenidoCsv = `\uFEFF${encabezados}\r\n${filasEjemplo.join('\r\n')}\r\n`;
@@ -134,7 +136,11 @@ export function ImportadorMasivoModal({
     );
 
     // Mapeo flexible de columnas
-    const idxCodigo = encabezados.findIndex((h) => ['codigo', 'sku', 'cod', 'articulo'].includes(h));
+    let idxCodigo = encabezados.findIndex((h) => ['codigo', 'cod', 'articulo', 'codigo_interno'].includes(h));
+    const idxSku = encabezados.findIndex((h) => ['sku', 'modelo', 'cod_prov', 'cod_fabrica', 'referencia'].includes(h));
+    if (idxCodigo === -1 && idxSku !== -1) {
+      idxCodigo = idxSku;
+    }
     const idxNombre = encabezados.findIndex((h) => ['nombre', 'descripcion', 'detalle', 'producto'].includes(h));
     const idxMarca = encabezados.findIndex((h) => ['marca', 'fabricante'].includes(h));
     const idxRubro = encabezados.findIndex((h) => ['rubro', 'categoria', 'familia', 'seccion'].includes(h));
@@ -198,11 +204,13 @@ export function ImportadorMasivoModal({
         error = 'Falta el nombre o descripción';
       }
 
+      const sku = (idxSku !== -1 ? cols[idxSku]?.trim() : undefined) || undefined;
       const esNuevo = !codigosExistentes.has(codigo.toLowerCase());
 
       items.push({
         fila: i + 1,
         codigo,
+        sku,
         nombre,
         marca: marca || undefined,
         rubroNombre: rubroNombre || undefined,
@@ -250,6 +258,7 @@ export function ImportadorMasivoModal({
       const payload = {
         productos: validos.map((it) => ({
           codigo: it.codigo,
+          sku: it.sku,
           nombre: it.nombre,
           marca: it.marca,
           rubroNombre: it.rubroNombre,

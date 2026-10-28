@@ -74,6 +74,7 @@ export function registerProductosRoutes(
           const res = await client.query<{
             producto_id: string;
             codigo: string;
+            sku: string | null;
             nombre: string;
             marca: string | null;
             imagen_url: string | null;
@@ -85,7 +86,7 @@ export function registerProductosRoutes(
             permite_fraccion: boolean;
             rubro_nombre: string | null;
           }>(
-            `select p.id as producto_id, p.codigo, p.nombre, p.marca, p.imagen_url,
+            `select p.id as producto_id, p.codigo, p.sku, p.nombre, p.marca, p.imagen_url,
                     p.costo_base, coalesce(s.stock_actual_base, 0) as stock_actual_base,
                     p.unidad_principal, p.unidad_secundaria, p.factor_conversion, p.permite_fraccion,
                     r.nombre as rubro_nombre
@@ -93,7 +94,7 @@ export function registerProductosRoutes(
              left join v_stock_actual s on s.producto_id = p.id
              left join rubro r on r.id = p.rubro_id
              left join producto_codigo_barra cb on cb.producto_id = p.id
-             where (cb.codigo_barra = $1 or p.codigo = $1 or p.codigo_qr = $1)
+             where (cb.codigo_barra = $1 or p.codigo = $1 or p.sku = $1 or p.codigo_qr = $1)
                and p.activo = true
              limit 1`,
             [codigoBuscado],
@@ -125,6 +126,7 @@ export function registerProductosRoutes(
             codigoBarra: codigoBuscado,
             productoId: prod.producto_id,
             codigo: prod.codigo,
+            sku: prod.sku ?? undefined,
             nombre: prod.nombre,
             marca: prod.marca ?? undefined,
             imagenUrl: prod.imagen_url ?? undefined,
@@ -157,11 +159,12 @@ export function registerProductosRoutes(
       const claims = await authenticateRequest(request, verifyToken);
       const query = (request.query ?? {}) as {
         q?: string;
+        busqueda?: string;
         rubroId?: string;
         activo?: string;
       };
 
-      const qTerm = query.q?.trim() || null;
+      const qTerm = query.q?.trim() || query.busqueda?.trim() || null;
       const rubroId = query.rubroId?.trim() || null;
       const soloActivos = query.activo !== 'false';
 
@@ -170,7 +173,7 @@ export function registerProductosRoutes(
         claims.negocioId,
         async ({ client }) => {
           const sqlQuery = `
-            select p.id, p.codigo, p.nombre, p.marca, p.descripcion, p.imagen_url, p.codigo_qr,
+            select p.id, p.codigo, p.sku, p.nombre, p.marca, p.descripcion, p.imagen_url, p.codigo_qr,
                    p.costo_base, p.unidad_principal, p.unidad_secundaria, p.factor_conversion,
                    p.permite_fraccion, p.stock_minimo, p.activo, p.rubro_id,
                    coalesce(r.nombre, 'Sin rubro') as rubro_nombre,
@@ -183,6 +186,7 @@ export function registerProductosRoutes(
               and ($3::text is null or (
                 p.nombre ilike '%' || $3 || '%' or
                 p.codigo ilike '%' || $3 || '%' or
+                p.sku ilike '%' || $3 || '%' or
                 p.marca ilike '%' || $3 || '%' or
                 exists (
                   select 1 from producto_codigo_barra cb
@@ -196,6 +200,7 @@ export function registerProductosRoutes(
           interface ProductoRow {
             id: string;
             codigo: string;
+            sku: string | null;
             nombre: string;
             marca: string | null;
             descripcion: string | null;
@@ -329,6 +334,7 @@ export function registerProductosRoutes(
               negocioId: claims.negocioId,
               rubroId: body.rubroId ?? null,
               codigo: body.codigo,
+              sku: body.sku || null,
               nombre: body.nombre,
               marca: body.marca ?? null,
               descripcion: body.descripcion ?? null,
@@ -389,6 +395,7 @@ export function registerProductosRoutes(
             .set({
               rubroId: body.rubroId ?? null,
               codigo: body.codigo,
+              sku: body.sku || null,
               nombre: body.nombre,
               marca: body.marca ?? null,
               descripcion: body.descripcion ?? null,
@@ -658,8 +665,9 @@ export function registerProductosRoutes(
                      rubro_id = coalesce($3, rubro_id),
                      costo_base = $4,
                      unidad_principal = coalesce($5, unidad_principal),
-                     stock_minimo = coalesce($6, stock_minimo)
-                 where id = $7`,
+                     stock_minimo = coalesce($6, stock_minimo),
+                     sku = coalesce($7, sku)
+                 where id = $8`,
                 [
                   item.nombre,
                   item.marca ?? null,
@@ -667,6 +675,7 @@ export function registerProductosRoutes(
                   costoFinal,
                   item.unidadPrincipal,
                   item.stockMinimo,
+                  item.sku ?? null,
                   prodId,
                 ],
               );
@@ -674,13 +683,14 @@ export function registerProductosRoutes(
             } else {
               const insertRes = await client.query<{ id: string }>(
                 `insert into producto (
-                   negocio_id, codigo, nombre, marca, rubro_id,
+                   negocio_id, codigo, sku, nombre, marca, rubro_id,
                    costo_base, unidad_principal, stock_minimo
-                 ) values ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  returning id`,
                 [
                   claims.negocioId,
                   item.codigo,
+                  item.sku ?? null,
                   item.nombre,
                   item.marca ?? null,
                   rubroId,

@@ -643,6 +643,54 @@ interface TestLookupResponse {
       expect(resCheck.rows[0]?.costo_base).toBe('58500.00');
     });
 
+    it('permite registrar y buscar productos por su SKU (código de fábrica / modelo)', async () => {
+      // 1. Crear producto con SKU explícito
+      const resCrear = await app.inject({
+        method: 'POST',
+        url: '/productos',
+        headers: { authorization: `Bearer ${negocioA.tokenEncargado}` },
+        payload: {
+          codigo: 'INT-PAS-10',
+          sku: 'KL29110N',
+          nombre: 'Cinta Pasacable Kalop 10m',
+          marca: 'Kalop',
+          costoBase: '4500.00',
+          unidadPrincipal: 'un',
+          factorConversion: '1.000',
+          permiteFraccion: false,
+          stockMinimo: '2.000',
+          activo: true,
+          codigosBarra: ['7793863750696'],
+        },
+      });
+
+      expect(resCrear.statusCode).toBe(201);
+      const creado = resCrear.json<{ id: string; codigo: string; sku: string }>();
+      expect(creado.sku).toBe('KL29110N');
+
+      // 2. Buscar por SKU exacto o aproximado en /productos?q=KL29110N
+      const resBusqSku = await app.inject({
+        method: 'GET',
+        url: '/productos?q=KL29110N',
+        headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+      });
+      expect(resBusqSku.statusCode).toBe(200);
+      const items = resBusqSku.json<Array<{ codigo: string; sku: string }>>();
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.find((it) => it.sku === 'KL29110N')).toBeDefined();
+
+      // 3. Buscar vía lookup-ean por el SKU
+      const resLookup = await app.inject({
+        method: 'GET',
+        url: '/productos/lookup-ean/KL29110N',
+        headers: { authorization: `Bearer ${negocioA.tokenCajero}` },
+      });
+      expect(resLookup.statusCode).toBe(200);
+      const lookupData = resLookup.json<{ origen: string; sku: string; nombre: string }>();
+      expect(lookupData.origen).toBe('local');
+      expect(lookupData.sku).toBe('KL29110N');
+    });
+
     it('Fase 19: rechaza actualización masiva de precios a usuarios con rol cajero (403)', async () => {
       const res = await app.inject({
         method: 'POST',

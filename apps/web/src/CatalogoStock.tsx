@@ -14,6 +14,7 @@ interface ListaPrecioItem {
 interface ProductoItem {
   id: string;
   codigo: string;
+  sku: string | null;
   nombre: string;
   marca: string | null;
   descripcion: string | null;
@@ -36,6 +37,7 @@ interface LookupEanResponse {
   encontrado: boolean;
   origen: 'local' | 'mercadolibre' | 'catalogo_externo' | 'no_encontrado';
   codigoBarra: string;
+  sku?: string;
   nombre?: string;
   marca?: string;
   imagenUrl?: string;
@@ -52,6 +54,7 @@ interface LookupEanResponse {
     nombre: string;
     marca?: string;
     rubro?: string;
+    sku?: string;
     snippet?: string;
   }>;
 }
@@ -90,6 +93,7 @@ export function CatalogoStock({
   // Formulario de Alta / Edición
   const [formId, setFormId] = useState<string | null>(null);
   const [formCodigo, setFormCodigo] = useState<string>('');
+  const [formSku, setFormSku] = useState<string>('');
   const [formNombre, setFormNombre] = useState<string>('');
   const [formMarca, setFormMarca] = useState<string>('');
   const [formRubroId, setFormRubroId] = useState<string>('');
@@ -103,7 +107,7 @@ export function CatalogoStock({
   const [formImagenUrl, setFormImagenUrl] = useState<string>('');
   const [origenAutocompletado, setOrigenAutocompletado] = useState<string | null>(null);
   const [candidatosWeb, setCandidatosWeb] = useState<
-    Array<{ nombre: string; marca?: string; rubro?: string; snippet?: string }>
+    Array<{ nombre: string; marca?: string; rubro?: string; sku?: string; snippet?: string }>
   >([]);
 
   // Formulario de Ajuste de Stock
@@ -224,7 +228,8 @@ export function CatalogoStock({
         setCandidatosWeb(lookup.candidatos ?? []);
         // Encontrado en internet: abrir modal de alta con autocompletado
         abrirModalAltaConDatos({
-          codigo: codigoLimpio,
+          codigo: lookup.codigo ?? codigoLimpio,
+          sku: lookup.sku,
           nombre: lookup.nombre ?? '',
           marca: lookup.marca ?? '',
           imagenUrl: lookup.imagenUrl ?? '',
@@ -240,6 +245,7 @@ export function CatalogoStock({
         // No encontrado ni local ni en fuentes externas: abrir modal vacío con el código asignado
         abrirModalAltaConDatos({
           codigo: codigoLimpio,
+          sku: '',
           nombre: '',
           marca: '',
           imagenUrl: '',
@@ -277,6 +283,7 @@ export function CatalogoStock({
       if (lookup.encontrado) {
         if (lookup.nombre) setFormNombre(lookup.nombre);
         if (lookup.marca) setFormMarca(lookup.marca);
+        if (lookup.sku) setFormSku(lookup.sku);
         if (lookup.imagenUrl) setFormImagenUrl(lookup.imagenUrl);
         if (lookup.candidatos && lookup.candidatos.length > 0) {
           setCandidatosWeb(lookup.candidatos);
@@ -327,6 +334,7 @@ export function CatalogoStock({
 
   const abrirModalAltaConDatos = (datos: {
     codigo: string;
+    sku?: string | undefined;
     nombre: string;
     marca: string;
     imagenUrl: string;
@@ -336,6 +344,7 @@ export function CatalogoStock({
   }): void => {
     setFormId(null);
     setFormCodigo(datos.codigo);
+    setFormSku(datos.sku ?? '');
     setFormNombre(datos.nombre);
     setFormMarca(datos.marca);
     let rubroIdInicial = rubros[0]?.id ?? '';
@@ -364,6 +373,7 @@ export function CatalogoStock({
   const abrirModalEdicion = (prod: ProductoItem): void => {
     setFormId(prod.id);
     setFormCodigo(prod.codigo);
+    setFormSku(prod.sku ?? '');
     setFormNombre(prod.nombre);
     setFormMarca(prod.marca ?? '');
     setFormRubroId(prod.rubro_id ?? (rubros[0]?.id ?? ''));
@@ -388,6 +398,7 @@ export function CatalogoStock({
 
     const payload = {
       codigo: formCodigo.trim(),
+      sku: formSku.trim() || undefined,
       nombre: formNombre.trim(),
       marca: formMarca.trim() || undefined,
       rubroId: formRubroId || undefined,
@@ -537,15 +548,50 @@ export function CatalogoStock({
       {/* Controles de Catálogo */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 flex-1">
-          <input
-            type="text"
-            placeholder="Buscar por código, nombre, marca o barra..."
-            value={busqueda}
-            onChange={(e) => {
-              setBusqueda(e.target.value);
+          <div className="relative flex-1 md:w-80">
+            <input
+              type="text"
+              placeholder="Buscar por código, SKU, nombre, marca o barra..."
+              value={busqueda}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (busqueda.trim() && productos.length === 0) {
+                    void procesarDisparoPistola(busqueda);
+                  }
+                }
+              }}
+              className="rounded-xl bg-white pl-4 pr-9 py-2 text-sm text-slate-900 border border-slate-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+            />
+            {busqueda.trim() && (
+              <button
+                type="button"
+                title="Limpiar búsqueda"
+                onClick={() => {
+                  setBusqueda('');
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs px-1 font-bold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            disabled={buscandoEan || !busqueda.trim()}
+            onClick={() => {
+              void procesarDisparoPistola(busqueda);
             }}
-            className="rounded-xl bg-white px-4 py-2 text-sm text-slate-900 border border-slate-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-72"
-          />
+            className="rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+            title="Buscar código o descripción en internet para autocompletar alta"
+          >
+            <span>🌐</span>
+            <span>{buscandoEan ? 'Buscando en web...' : 'Buscar en Web / EAN'}</span>
+          </button>
 
           <select
             value={rubroFiltro}
@@ -645,8 +691,34 @@ export function CatalogoStock({
               ) : productos.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                    No se encontraron productos en el catálogo. Dispará con la pistola o hacé clic
-                    en "+ Nuevo Artículo".
+                    {busqueda.trim() ? (
+                      <div className="flex flex-col items-center justify-center gap-3 py-4">
+                        <p className="text-base text-slate-700 font-medium">
+                          No se encontró ningún artículo local con &quot;
+                          <span className="font-bold text-slate-900">{busqueda}</span>&quot;
+                        </p>
+                        <p className="text-xs text-slate-500 max-w-md">
+                          Podés consultar este código o descripción en internet para autocompletar el alta del producto en el catálogo.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={buscandoEan}
+                          onClick={() => {
+                            void procesarDisparoPistola(busqueda);
+                          }}
+                          className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-blue-500 flex items-center gap-2 transition disabled:opacity-50"
+                        >
+                          <span>⚡</span>
+                          <span>
+                            {buscandoEan
+                              ? 'Buscando en la web...'
+                              : `Buscar "${busqueda}" en la Web y dar de alta`}
+                          </span>
+                        </button>
+                      </div>
+                    ) : (
+                      'No se encontraron productos en el catálogo. Dispará con la pistola o hacé clic en "+ Nuevo Artículo".'
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -672,8 +744,9 @@ export function CatalogoStock({
                           )}
                           <div>
                             <div className="font-bold text-slate-900">{prod.nombre}</div>
-                            <div className="text-xs text-slate-500 flex items-center gap-2">
-                              <span>SKU: {prod.codigo}</span>
+                            <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
+                              <span>Cód: {prod.codigo}</span>
+                              {prod.sku && <span className="font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">SKU: {prod.sku}</span>}
                               {prod.marca && <span>· Marca: {prod.marca}</span>}
                               {prod.permite_fraccion && (
                                 <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
@@ -801,17 +874,17 @@ export function CatalogoStock({
             </div>
 
             <form onSubmit={(e) => { void guardarProducto(e); }} className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase text-slate-600">Código / SKU / EAN</label>
-                    <span className="text-[10px] text-slate-400">Escaneá o presioná Enter</span>
+                    <label className="text-xs font-bold uppercase text-slate-600">Cód. Interno / Barra</label>
+                    <span className="text-[10px] text-slate-400">Escaneá o Enter</span>
                   </div>
-                  <div className="mt-1 flex gap-1.5">
+                  <div className="mt-1 flex gap-1">
                     <input
                       type="text"
                       required
-                      placeholder="Escaneá código de barras..."
+                      placeholder="Código o EAN..."
                       value={formCodigo}
                       onChange={(e) => {
                         setFormCodigo(e.target.value);
@@ -833,17 +906,33 @@ export function CatalogoStock({
                         void consultarEanYAutocompletar(formCodigo);
                       }}
                       title="Buscar datos del artículo en internet"
-                      className="shrink-0 px-3 py-2 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition"
+                      className="shrink-0 px-2.5 py-2 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition"
                     >
-                      {buscandoEnModal ? '⏳' : '⚡ Buscar'}
+                      {buscandoEnModal ? '⏳' : '⚡ Web'}
                     </button>
                   </div>
                 </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-600">
+                    SKU (Código Fábrica / Modelo)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej. KL29110N, DWE575"
+                    value={formSku}
+                    onChange={(e) => {
+                      setFormSku(e.target.value);
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
                 <div>
                   <label className="text-xs font-bold uppercase text-slate-600">Marca</label>
                   <input
                     type="text"
-                    placeholder="Ej. Bosch, Stanley, Sinteplast"
+                    placeholder="Ej. Bosch, Stanley, Kalop"
                     value={formMarca}
                     onChange={(e) => {
                       setFormMarca(e.target.value);
@@ -882,6 +971,7 @@ export function CatalogoStock({
                           onClick={() => {
                             setFormNombre(cand.nombre);
                             if (cand.marca) setFormMarca(cand.marca);
+                            if (cand.sku) setFormSku(cand.sku);
                             if (cand.rubro) {
                               const rubroCand = cand.rubro.toLowerCase();
                               const rMatch = rubros.find(
@@ -899,7 +989,14 @@ export function CatalogoStock({
                           }`}
                         >
                           <div className="font-semibold truncate max-w-[240px]">{cand.nombre}</div>
-                          {cand.marca && <div className="text-[10px] opacity-80">Marca: {cand.marca}</div>}
+                          <div className="text-[10px] opacity-80 flex items-center gap-1.5">
+                            {cand.marca && <span>Marca: {cand.marca}</span>}
+                            {cand.sku && (
+                              <span className="font-mono bg-indigo-100/60 px-1 rounded">
+                                SKU: {cand.sku}
+                              </span>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>

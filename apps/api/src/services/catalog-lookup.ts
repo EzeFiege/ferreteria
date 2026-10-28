@@ -177,6 +177,19 @@ function deducirMarca(texto: string): string | undefined {
   return undefined;
 }
 
+function extraerSku(texto: string): string | undefined {
+  const m = texto.match(
+    /(?:modelo|sku|ref\b|art\b|c[oó]d(?:\.|igo)?\s+(?:de\s+)?(?:f[aá]brica|prov|modelo))\s*[:#.-]?\s*([A-Za-z0-9_-]{3,20})/i,
+  );
+  if (m && m[1]) {
+    const val = m[1].trim();
+    if (!/^\d{12,14}$/.test(val)) return val;
+  }
+  const m2 = texto.match(/\b([A-Z]{2,4}\d{3,6}[A-Z0-9]?)\b/);
+  if (m2 && m2[1]) return m2[1];
+  return undefined;
+}
+
 async function buscarEnMercadoLibre(codigoLimpio: string): Promise<LookupEanResult | null> {
   try {
     const controller = new AbortController();
@@ -280,11 +293,19 @@ async function buscarEnCatalogoAbierto(codigoLimpio: string): Promise<LookupEanR
  * Extrae títulos de catálogo, marcas y rubros sugeridos, permitiendo tolerar variantes de formato EAN.
  */
 async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupEanResult | null> {
-  const intentos = [codigoLimpio];
+  const esNumeroPuro = /^\d{6,14}$/.test(codigoLimpio);
+  const intentos: string[] = [];
 
-  // Si tiene 13 caracteres (EAN-13), también podemos buscar los primeros 12 dígitos
-  if (codigoLimpio.length === 13) {
-    intentos.push(codigoLimpio.slice(0, 12));
+  if (esNumeroPuro) {
+    // 1. Con comillas para forzar coincidencia del código de barras (EAN/UPC) en la web
+    intentos.push(`"${codigoLimpio}"`);
+    // 2. Sin comillas por aproximación
+    intentos.push(codigoLimpio);
+    if (codigoLimpio.length === 13) {
+      intentos.push(codigoLimpio.slice(0, 12));
+    }
+  } else {
+    intentos.push(codigoLimpio);
   }
 
   for (const query of intentos) {
@@ -301,7 +322,7 @@ async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupE
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
         body: postBody.toString(),
@@ -315,10 +336,10 @@ async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupE
 
       const html = await res.text();
       const rawTitles = [
-        ...html.matchAll(/class='result-link'[^>]*>([\s\S]*?)<\/a>/gi),
+        ...html.matchAll(/class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/gi),
       ].map((m) => m[1]?.replace(/<[^>]+>/g, '').trim() ?? '');
       const rawSnippets = [
-        ...html.matchAll(/class='result-snippet'[^>]*>([\s\S]*?)<\/td>/gi),
+        ...html.matchAll(/class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/gi),
       ].map((m) => m[1]?.replace(/<[^>]+>/g, '').trim() ?? '');
 
       const candidatos: LookupEanCandidato[] = [];
@@ -344,6 +365,7 @@ async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupE
             nombre: nombreLimpio,
             marca: deducirMarca(textoCompleto),
             rubro: deducirRubro(textoCompleto),
+            sku: extraerSku(textoCompleto),
             snippet: snip || undefined,
           });
         }
@@ -365,6 +387,7 @@ async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupE
             codigoBarra: codigoLimpio,
             nombre: seleccionado.nombre,
             marca: seleccionado.marca,
+            sku: seleccionado.sku,
             rubroSugerido: seleccionado.rubro,
             candidatos,
           };
