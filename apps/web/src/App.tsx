@@ -380,41 +380,29 @@ export function App(): ReactElement {
       const data = (await res.json()) as ContextoMostrador;
       setOperadorActivo((prev) => {
         if (!prev) {
-          const primero = data.operadores[0] ?? null;
-          if (primero) {
-            try {
-              localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
-            } catch {
-              // Ignora
-            }
-          }
-          return primero;
+          return null;
         }
         const coincidePorId = data.operadores.find((o) => o.id === prev.id);
         if (coincidePorId) {
+          const actualizado: OperadorItem = {
+            id: coincidePorId.id,
+            nombre: coincidePorId.nombre,
+            rol: coincidePorId.rol,
+            token: prev.token || coincidePorId.token,
+          };
           try {
-            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorId));
+            localStorage.setItem('ferreteria_sesion', JSON.stringify(actualizado));
           } catch {
             // Ignora
           }
-          return coincidePorId;
+          return actualizado;
         }
-        const coincidePorRol = data.operadores.find((o) => o.rol === prev.rol);
-        if (coincidePorRol) {
-          try {
-            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorRol));
-          } catch {
-            // Ignora
-          }
-          return coincidePorRol;
-        }
-        const primero = data.operadores[0] ?? prev;
         try {
-          localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
+          localStorage.removeItem('ferreteria_sesion');
         } catch {
           // Ignora
         }
-        return primero;
+        return null;
       });
       setContexto(data);
     } catch {
@@ -455,41 +443,29 @@ export function App(): ReactElement {
         const data = (await res.json()) as ContextoMostrador;
       setOperadorActivo((prev) => {
         if (!prev) {
-          const primero = data.operadores[0] ?? null;
-          if (primero) {
-            try {
-              localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
-            } catch {
-              // Ignora
-            }
-          }
-          return primero;
+          return null;
         }
         const coincidePorId = data.operadores.find((o) => o.id === prev.id);
         if (coincidePorId) {
+          const actualizado: OperadorItem = {
+            id: coincidePorId.id,
+            nombre: coincidePorId.nombre,
+            rol: coincidePorId.rol,
+            token: prev.token || coincidePorId.token,
+          };
           try {
-            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorId));
+            localStorage.setItem('ferreteria_sesion', JSON.stringify(actualizado));
           } catch {
             // Ignora
           }
-          return coincidePorId;
+          return actualizado;
         }
-        const coincidePorRol = data.operadores.find((o) => o.rol === prev.rol);
-        if (coincidePorRol) {
-          try {
-            localStorage.setItem('ferreteria_sesion', JSON.stringify(coincidePorRol));
-          } catch {
-            // Ignora
-          }
-          return coincidePorRol;
-        }
-        const primero = data.operadores[0] ?? prev;
         try {
-          localStorage.setItem('ferreteria_sesion', JSON.stringify(primero));
+          localStorage.removeItem('ferreteria_sesion');
         } catch {
           // Ignora
         }
-        return primero;
+        return null;
       });
         setContexto(data);
 
