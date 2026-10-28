@@ -288,113 +288,121 @@ async function buscarEnCatalogoAbierto(codigoLimpio: string): Promise<LookupEanR
   }
 }
 
+function puntuarCandidato(c: LookupEanCandidato, codigo: string): number {
+  let score = 0;
+  const texto = `${c.nombre} ${c.snippet ?? ''}`.toLowerCase();
+  if (c.snippet && c.snippet.includes(codigo)) score += 100;
+  if (c.nombre.includes(codigo)) score += 80;
+  for (const m of MARCAS_CONOCIDAS) {
+    if (new RegExp(`\\b${m}\\b`, 'i').test(texto)) {
+      score += 40;
+      break;
+    }
+  }
+  if (c.rubro) score += 30;
+  if (c.sku) score += 20;
+  if (/ferreter[ií]a|materiales|construcci[oó]n|electricidad|profesional|cinta|alma/i.test(texto)) score += 25;
+  if (/pen\b|pencil|gel pen|retractable|vinyl|funko|doll|album|t-shirt|pelicula|cd\b|cd-rom/i.test(texto)) score -= 150;
+  return score;
+}
+
 /**
  * Busca productos en la web abierta por aproximación utilizando motores de consulta web limpios (DDG Lite).
  * Extrae títulos de catálogo, marcas y rubros sugeridos, permitiendo tolerar variantes de formato EAN.
  */
 async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupEanResult | null> {
-  const esNumeroPuro = /^\d{6,14}$/.test(codigoLimpio);
-  const intentos: string[] = [];
-
-  if (esNumeroPuro) {
-    // 1. Con comillas para forzar coincidencia del código de barras (EAN/UPC) en la web
-    intentos.push(`"${codigoLimpio}"`);
-    // 2. Sin comillas por aproximación
-    intentos.push(codigoLimpio);
-    if (codigoLimpio.length === 13) {
-      intentos.push(codigoLimpio.slice(0, 12));
-    }
-  } else {
-    intentos.push(codigoLimpio);
+  const intentos: string[] = [codigoLimpio];
+  if (codigoLimpio.length === 13) {
+    intentos.push(codigoLimpio.slice(0, 12));
   }
 
+  const userAgents = [
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+  ];
+
   for (const query of intentos) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => {
-        controller.abort();
-      }, 4500);
+    for (const ua of userAgents) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => {
+          controller.abort();
+        }, 3000);
 
-      const postBody = new URLSearchParams({ q: query });
-      const res = await fetch('https://lite.duckduckgo.com/lite/', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        },
-        body: postBody.toString(),
-      });
+        const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+        const res = await fetch(url, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'User-Agent': ua,
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
+          },
+        });
 
-      clearTimeout(timer);
+        clearTimeout(timer);
 
-      if (!res.ok) {
-        continue;
-      }
-
-      const html = await res.text();
-      const rawTitles = [
-        ...html.matchAll(/class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/gi),
-      ].map((m) => m[1]?.replace(/<[^>]+>/g, '').trim() ?? '');
-      const rawSnippets = [
-        ...html.matchAll(/class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/gi),
-      ].map((m) => m[1]?.replace(/<[^>]+>/g, '').trim() ?? '');
-
-      const candidatos: LookupEanCandidato[] = [];
-
-      for (let i = 0; i < rawTitles.length; i++) {
-        const tit = rawTitles[i] ?? '';
-        const snip = rawSnippets[i] ?? '';
-
-        // Ignorar páginas de tracking genérico o buscadores vacíos
-        if (
-          /barcode lookup|17track|package tracking|upc lookup|ean search/i.test(
-            tit,
-          ) ||
-          /track packages worldwide/i.test(snip)
-        ) {
+        if (res.status !== 200) {
           continue;
         }
 
-        const nombreLimpio = limpiarTituloWeb(tit);
-        if (nombreLimpio && nombreLimpio.length > 5) {
-          const textoCompleto = `${nombreLimpio} ${snip}`;
-          candidatos.push({
-            nombre: nombreLimpio,
-            marca: deducirMarca(textoCompleto),
-            rubro: deducirRubro(textoCompleto),
-            sku: extraerSku(textoCompleto),
-            snippet: snip || undefined,
-          });
-        }
-      }
+        const html = await res.text();
+        const rawTitles = [
+          ...html.matchAll(/class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/gi),
+        ].map((m) => m[1]?.replace(/<[^>]+>/g, '').trim() ?? '');
+        const rawSnippets = [
+          ...html.matchAll(/class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/gi),
+        ].map((m) => m[1]?.replace(/<[^>]+>/g, '').trim() ?? '');
 
-      if (candidatos.length > 0) {
-        // Priorizar aquellos candidatos cuyo snippet o nombre mencione el código o SKU exacto
-        const coincidenciaExacta = candidatos.find(
-          (c) =>
-            (c.snippet && c.snippet.includes(codigoLimpio)) ||
-            c.nombre.includes(codigoLimpio),
-        );
-        const seleccionado = coincidenciaExacta ?? candidatos[0];
+        const candidatos: LookupEanCandidato[] = [];
 
-        if (seleccionado) {
-          return {
-            encontrado: true,
-            origen: 'catalogo_externo',
-            codigoBarra: codigoLimpio,
-            nombre: seleccionado.nombre,
-            marca: seleccionado.marca,
-            sku: seleccionado.sku,
-            rubroSugerido: seleccionado.rubro,
-            candidatos,
-          };
+        for (let i = 0; i < rawTitles.length; i++) {
+          const tit = rawTitles[i] ?? '';
+          const snip = rawSnippets[i] ?? '';
+
+          // Ignorar páginas de tracking genérico o buscadores vacíos
+          if (
+            /barcode lookup|17track|package tracking|upc lookup|ean search/i.test(
+              tit,
+            ) ||
+            /track packages worldwide/i.test(snip)
+          ) {
+            continue;
+          }
+
+          const nombreLimpio = limpiarTituloWeb(tit);
+          if (nombreLimpio && nombreLimpio.length > 5) {
+            const textoCompleto = `${nombreLimpio} ${snip}`;
+            candidatos.push({
+              nombre: nombreLimpio,
+              marca: deducirMarca(textoCompleto),
+              rubro: deducirRubro(textoCompleto),
+              sku: extraerSku(textoCompleto),
+              snippet: snip || undefined,
+            });
+          }
         }
+
+        if (candidatos.length > 0) {
+          candidatos.sort((a, b) => puntuarCandidato(b, codigoLimpio) - puntuarCandidato(a, codigoLimpio));
+          const seleccionado = candidatos[0];
+
+          if (seleccionado && puntuarCandidato(seleccionado, codigoLimpio) > -50) {
+            return {
+              encontrado: true,
+              origen: 'catalogo_externo',
+              codigoBarra: codigoLimpio,
+              nombre: seleccionado.nombre,
+              marca: seleccionado.marca,
+              sku: seleccionado.sku,
+              rubroSugerido: seleccionado.rubro,
+              candidatos,
+            };
+          }
+        }
+      } catch {
+        // Continúa con siguiente intento
       }
-    } catch {
-      // Continúa con siguiente intento si falló la red
     }
   }
 
@@ -402,7 +410,7 @@ async function buscarEnWebPorAproximacion(codigoLimpio: string): Promise<LookupE
 }
 
 /**
- * Consulta fuentes externas (Mercado Libre, Catálogo Abierto y Búsqueda Web por aproximación)
+ * Consulta fuentes externas (Búsqueda Web por aproximación, Catálogo Abierto y Mercado Libre)
  * para resolver cualquier producto por su código de barras EAN/UPC y autocompletar el alta.
  */
 export async function lookupEanExterno(
@@ -417,22 +425,22 @@ export async function lookupEanExterno(
     };
   }
 
-  // 1. Intenta en Mercado Libre Argentina
-  const resMl = await buscarEnMercadoLibre(limpio);
-  if (resMl) {
-    return resMl;
+  // 1. Prioridad: Búsqueda Web por aproximación directa (rápida, precisa y con catálogo de ferretería argentino)
+  const resWeb = await buscarEnWebPorAproximacion(limpio);
+  if (resWeb) {
+    return resWeb;
   }
 
-  // 2. Fallback a Catálogo Abierto (OpenFood/OpenProduct)
+  // 2. Fallback: Catálogo Abierto (OpenFood/OpenProduct)
   const resCat = await buscarEnCatalogoAbierto(limpio);
   if (resCat) {
     return resCat;
   }
 
-  // 3. Fallback a Búsqueda Web Abierta con aproximación y tolerancia de SKU/EAN
-  const resWeb = await buscarEnWebPorAproximacion(limpio);
-  if (resWeb) {
-    return resWeb;
+  // 3. Fallback: Mercado Libre Argentina
+  const resMl = await buscarEnMercadoLibre(limpio);
+  if (resMl) {
+    return resMl;
   }
 
   return {
