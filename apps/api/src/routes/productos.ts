@@ -59,9 +59,12 @@ export function registerProductosRoutes(
 ): void {
   const { pool, verifyToken } = options;
 
-  // 1. Lookup de código de barras / EAN: busca primero local y luego en Mercado Libre
+  // 1. Lookup de código de barras / EAN: busca primero local y luego en Mercado Libre / Catálogo Web
   app.get('/productos/lookup-ean/:codigo', async (request, reply) => {
     try {
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
       const claims = await authenticateRequest(request, verifyToken);
       const params = request.params as { codigo: string };
       const codigoBuscado = params.codigo.trim();

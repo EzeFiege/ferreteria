@@ -197,17 +197,37 @@ export function CatalogoStock({
     };
   }, []);
 
+  const limpiarFormularioAlta = useCallback(() => {
+    setFormId(null);
+    setFormCodigo('');
+    setFormSku('');
+    setFormNombre('');
+    setFormMarca('');
+    setFormRubroId(rubros[0]?.id ?? '');
+    setFormCostoBase('0.00');
+    setFormUnidadPrincipal('un');
+    setFormUnidadSecundaria('');
+    setFormFactorConversion('1.000');
+    setFormPermiteFraccion(false);
+    setFormStockMinimo('0.000');
+    setFormCodigosBarra('');
+    setFormImagenUrl('');
+    setOrigenAutocompletado(null);
+    setCandidatosWeb([]);
+  }, [rubros]);
+
   const procesarDisparoPistola = async (codigoEan: string): Promise<void> => {
     const codigoLimpio = codigoEan.trim();
     if (!codigoLimpio) return;
     setBuscandoEan(true);
-    setCodigoPistolaInput(codigoLimpio);
+    setCodigoPistolaInput('');
 
     try {
       const res = await fetch(
         apiUrl(`/api/productos/lookup-ean/${encodeURIComponent(codigoLimpio)}`),
         {
           headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
         },
       );
 
@@ -225,24 +245,23 @@ export function CatalogoStock({
         );
       } else if (lookup.origen === 'mercadolibre' || lookup.origen === 'catalogo_externo') {
         const origenNombre = lookup.origen === 'mercadolibre' ? 'Mercado Libre' : 'Búsqueda Web EAN';
-        setCandidatosWeb(lookup.candidatos ?? []);
-        // Encontrado en internet: abrir modal de alta con autocompletado
+        // Encontrado en internet: abrir modal de alta con autocompletado fresco
         abrirModalAltaConDatos({
           codigo: lookup.codigo ?? codigoLimpio,
-          sku: lookup.sku,
+          sku: lookup.sku ?? '',
           nombre: lookup.nombre ?? '',
           marca: lookup.marca ?? '',
           imagenUrl: lookup.imagenUrl ?? '',
           codigosBarra: codigoLimpio,
           origen: origenNombre,
           rubroSugerido: lookup.rubroSugerido,
+          candidatos: lookup.candidatos ?? [],
         });
         setAviso(
           `⚡ ¡Código EAN detectado en ${origenNombre}! Datos autocompletados: "${lookup.nombre ?? ''}"`,
         );
       } else {
-        setCandidatosWeb([]);
-        // No encontrado ni local ni en fuentes externas: abrir modal vacío con el código asignado
+        // No encontrado ni local ni en fuentes externas: abrir modal limpio con el código asignado
         abrirModalAltaConDatos({
           codigo: codigoLimpio,
           sku: '',
@@ -251,6 +270,7 @@ export function CatalogoStock({
           imagenUrl: '',
           codigosBarra: codigoLimpio,
           origen: null,
+          candidatos: [],
         });
         setAviso(`Código ${codigoLimpio} no registrado. Completá el alta del nuevo producto.`);
       }
@@ -271,6 +291,7 @@ export function CatalogoStock({
         apiUrl(`/api/productos/lookup-ean/${encodeURIComponent(limpio)}`),
         {
           headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
         },
       );
 
@@ -281,19 +302,13 @@ export function CatalogoStock({
       const lookup = (await res.json()) as LookupEanResponse;
 
       if (lookup.encontrado) {
-        if (lookup.nombre) setFormNombre(lookup.nombre);
-        if (lookup.marca) setFormMarca(lookup.marca);
-        if (lookup.sku) setFormSku(lookup.sku);
-        if (lookup.imagenUrl) setFormImagenUrl(lookup.imagenUrl);
-        if (lookup.candidatos && lookup.candidatos.length > 0) {
-          setCandidatosWeb(lookup.candidatos);
-        }
-
-        if (!formCodigosBarra) {
-          setFormCodigosBarra(limpio);
-        } else if (!formCodigosBarra.includes(limpio)) {
-          setFormCodigosBarra(`${formCodigosBarra}, ${limpio}`);
-        }
+        setFormCodigo(limpio);
+        setFormNombre(lookup.nombre ?? '');
+        setFormMarca(lookup.marca ?? '');
+        setFormSku(lookup.sku ?? '');
+        setFormImagenUrl(lookup.imagenUrl ?? '');
+        setFormCodigosBarra(limpio);
+        setCandidatosWeb(lookup.candidatos ?? []);
 
         if (lookup.rubroSugerido && rubros.length > 0) {
           const sugeridoLower = lookup.rubroSugerido.toLowerCase();
@@ -318,6 +333,14 @@ export function CatalogoStock({
         setAviso(`⚡ ¡Producto encontrado en ${fuente}! Datos autocompletados.`);
         return true;
       } else {
+        // Al buscar otro código no encontrado, limpiar los datos del artículo previo para evitar confusión
+        setFormCodigo(limpio);
+        setFormNombre('');
+        setFormMarca('');
+        setFormSku('');
+        setFormImagenUrl('');
+        setFormCodigosBarra(limpio);
+        setOrigenAutocompletado(null);
         setCandidatosWeb([]);
         setAviso(
           `No se encontraron datos en internet para el código ${limpio}. Podés ingresar los datos manualmente.`,
@@ -341,6 +364,7 @@ export function CatalogoStock({
     codigosBarra: string;
     origen: string | null;
     rubroSugerido?: string | undefined;
+    candidatos?: Array<{ nombre: string; marca?: string; rubro?: string; sku?: string; snippet?: string }>;
   }): void => {
     setFormId(null);
     setFormCodigo(datos.codigo);
@@ -367,6 +391,7 @@ export function CatalogoStock({
     setFormCodigosBarra(datos.codigosBarra);
     setFormImagenUrl(datos.imagenUrl);
     setOrigenAutocompletado(datos.origen);
+    setCandidatosWeb(datos.candidatos ?? []);
     setModalAltaAbierto(true);
   };
 
@@ -386,6 +411,7 @@ export function CatalogoStock({
     setFormCodigosBarra(prod.codigo);
     setFormImagenUrl(prod.imagen_url ?? '');
     setOrigenAutocompletado(null);
+    setCandidatosWeb([]);
     setModalAltaAbierto(true);
   };
 
@@ -434,6 +460,7 @@ export function CatalogoStock({
       }
 
       setModalAltaAbierto(false);
+      limpiarFormularioAlta();
       setAviso(`Artículo ${formNombre} guardado correctamente.`);
       void cargarProductos();
     } catch (err: unknown) {
@@ -639,11 +666,13 @@ export function CatalogoStock({
               onClick={() => {
                 abrirModalAltaConDatos({
                   codigo: '',
+                  sku: '',
                   nombre: '',
                   marca: '',
                   imagenUrl: '',
                   codigosBarra: '',
                   origen: null,
+                  candidatos: [],
                 });
               }}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-500 flex items-center justify-center gap-2"
@@ -862,15 +891,26 @@ export function CatalogoStock({
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setModalAltaAbierto(false);
-                }}
-                className="text-slate-400 hover:text-slate-600 font-bold"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={limpiarFormularioAlta}
+                  title="Limpiar todos los campos del formulario para ingresar otro artículo"
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  🔄 Limpiar datos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalAltaAbierto(false);
+                    limpiarFormularioAlta();
+                  }}
+                  className="text-slate-400 hover:text-slate-600 font-bold"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <form onSubmit={(e) => { void guardarProducto(e); }} className="mt-4 space-y-4">
@@ -970,8 +1010,8 @@ export function CatalogoStock({
                           type="button"
                           onClick={() => {
                             setFormNombre(cand.nombre);
-                            if (cand.marca) setFormMarca(cand.marca);
-                            if (cand.sku) setFormSku(cand.sku);
+                            setFormMarca(cand.marca ?? '');
+                            setFormSku(cand.sku ?? '');
                             if (cand.rubro) {
                               const rubroCand = cand.rubro.toLowerCase();
                               const rMatch = rubros.find(
@@ -1203,6 +1243,7 @@ export function CatalogoStock({
                   type="button"
                   onClick={() => {
                     setModalAltaAbierto(false);
+                    limpiarFormularioAlta();
                   }}
                   className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
                 >
