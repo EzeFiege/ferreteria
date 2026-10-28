@@ -238,4 +238,47 @@ describe('@ferreteria/shared schemas y aritmética de dinero', () => {
     expect(msgProveedor).toContain('OC-0099');
     expect(msgProveedor).toContain('12');
   });
+
+  it('normaliza enlaces de Google Drive a URLs directas de imagen e integra en guardarProductoSchema', async () => {
+    const { normalizarUrlImagen, guardarProductoSchema } = await import('./index.js');
+
+    // 1. Enlace compartido estándar de Google Drive (view?usp=sharing)
+    const driveShare = 'https://drive.google.com/file/d/1XyZ987AbCdEf_012/view?usp=sharing';
+    expect(normalizarUrlImagen(driveShare)).toBe(
+      'https://drive.google.com/thumbnail?id=1XyZ987AbCdEf_012&sz=w1000',
+    );
+
+    // 2. Enlace open?id= de Google Drive
+    const driveOpen = 'https://drive.google.com/open?id=1XyZ987AbCdEf_012';
+    expect(normalizarUrlImagen(driveOpen)).toBe(
+      'https://drive.google.com/thumbnail?id=1XyZ987AbCdEf_012&sz=w1000',
+    );
+
+    // 3. Enlace uc?id= de Google Drive
+    const driveUc = 'https://drive.google.com/uc?export=view&id=1XyZ987AbCdEf_012';
+    expect(normalizarUrlImagen(driveUc)).toBe(
+      'https://drive.google.com/thumbnail?id=1XyZ987AbCdEf_012&sz=w1000',
+    );
+
+    // 4. Enlace de Dropbox (?dl=0 -> ?raw=1)
+    const dropbox = 'https://www.dropbox.com/s/xyz123/foto.jpg?dl=0';
+    expect(normalizarUrlImagen(dropbox)).toBe('https://www.dropbox.com/s/xyz123/foto.jpg?raw=1');
+
+    // 5. Validación en esquema de producto con Google Drive y Data URI
+    const resDrive = guardarProductoSchema.safeParse({
+      codigo: 'PROD-DRIVE',
+      nombre: 'Taladro con foto Drive',
+      costoBase: '1000.00',
+      imagenUrl: normalizarUrlImagen(driveShare),
+    });
+    expect(resDrive.success).toBe(true);
+
+    const resDataUri = guardarProductoSchema.safeParse({
+      codigo: 'PROD-FILE',
+      nombre: 'Taladro con foto archivo',
+      costoBase: '1000.00',
+      imagenUrl: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD...',
+    });
+    expect(resDataUri.success).toBe(true);
+  });
 });

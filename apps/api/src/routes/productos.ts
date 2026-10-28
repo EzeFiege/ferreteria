@@ -12,6 +12,7 @@ import {
   guardarListaPrecioSchema,
   guardarProductoSchema,
   importarProductosMasivoSchema,
+  normalizarUrlImagen,
   type PrevisualizacionPrecioItem,
 } from '@ferreteria/shared';
 import {
@@ -341,7 +342,7 @@ export function registerProductosRoutes(
               nombre: body.nombre,
               marca: body.marca ?? null,
               descripcion: body.descripcion ?? null,
-              imagenUrl: body.imagenUrl || null,
+              imagenUrl: normalizarUrlImagen(body.imagenUrl) || null,
               codigoQr: body.codigoQr ?? null,
               costoBase: body.costoBase,
               unidadPrincipal: body.unidadPrincipal,
@@ -402,7 +403,7 @@ export function registerProductosRoutes(
               nombre: body.nombre,
               marca: body.marca ?? null,
               descripcion: body.descripcion ?? null,
-              imagenUrl: body.imagenUrl || null,
+              imagenUrl: normalizarUrlImagen(body.imagenUrl) || null,
               codigoQr: body.codigoQr ?? null,
               costoBase: body.costoBase,
               unidadPrincipal: body.unidadPrincipal,

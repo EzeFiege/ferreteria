@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { normalizarUrlImagen } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
 import { ImportadorMasivoModal } from './ImportadorMasivoModal.js';
@@ -117,6 +118,53 @@ export function CatalogoStock({
   const [ajusteCantidad, setAjusteCantidad] = useState<string>('1.000');
   const [ajusteUnidad, setAjusteUnidad] = useState<'principal' | 'secundaria'>('principal');
   const [ajusteNotas, setAjusteNotas] = useState<string>('');
+
+  const handleSubirArchivoImagen = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setAviso('El archivo seleccionado debe ser una imagen (JPG, PNG, WebP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      const dataUrl = loadEvent.target?.result as string;
+      if (!dataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const optimized = canvas.toDataURL('image/jpeg', 0.82);
+          setFormImagenUrl(optimized);
+        } else {
+          setFormImagenUrl(dataUrl);
+        }
+        setAviso('Foto cargada correctamente como modelo del producto.');
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const cargarListasPrecios = useCallback(async () => {
     try {
@@ -434,7 +482,7 @@ export function CatalogoStock({
       factorConversion: formPermiteFraccion ? formFactorConversion.trim() || '1.000' : '1.000',
       permiteFraccion: formPermiteFraccion,
       stockMinimo: formStockMinimo.trim() || '0.000',
-      imagenUrl: formImagenUrl.trim() || undefined,
+      imagenUrl: formImagenUrl.trim() ? normalizarUrlImagen(formImagenUrl.trim()) : undefined,
       codigosBarra: formCodigosBarra
         .split(',')
         .map((c) => c.trim())
@@ -765,6 +813,17 @@ export function CatalogoStock({
                               src={prod.imagen_url}
                               alt={prod.nombre}
                               className="h-10 w-10 rounded-lg object-cover border border-slate-200 bg-white"
+                              onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                if (img.src.includes('drive.google.com/thumbnail?id=')) {
+                                  const match = img.src.match(/id=([a-zA-Z0-9_-]+)/);
+                                  if (match?.[1]) {
+                                    img.src = `https://lh3.googleusercontent.com/d/${match[1]}`;
+                                    return;
+                                  }
+                                }
+                                img.style.display = 'none';
+                              }}
                             />
                           ) : (
                             <div className="h-10 w-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 font-bold text-xs">
@@ -1209,29 +1268,103 @@ export function CatalogoStock({
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase text-slate-600">
-                    URL de Imagen / Foto
-                  </label>
-                  <div className="mt-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="https://..."
-                      value={formImagenUrl}
-                      onChange={(e) => {
-                        setFormImagenUrl(e.target.value);
-                      }}
-                      className="w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900"
-                    />
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase text-slate-600">
+                      Foto / Modelo del Producto
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Link web, Google Drive o archivo
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Pegá link de Google Drive (https://drive.google.com/...) o web"
+                        value={formImagenUrl}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormImagenUrl(normalizarUrlImagen(val));
+                        }}
+                        onPaste={(e) => {
+                          const texto = e.clipboardData.getData('text');
+                          if (
+                            texto &&
+                            (texto.includes('drive.google.com') ||
+                              texto.includes('docs.google.com') ||
+                              texto.includes('dropbox.com'))
+                          ) {
+                            e.preventDefault();
+                            setFormImagenUrl(normalizarUrlImagen(texto));
+                          }
+                        }}
+                        className="w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <label
+                        title="Subir archivo desde tu computadora o Google Drive"
+                        className="shrink-0 cursor-pointer rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition flex items-center gap-1.5 shadow-xs"
+                      >
+                        <span>📁</span>
+                        <span>Subir Foto</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleSubirArchivoImagen}
+                        />
+                      </label>
+                    </div>
+
+                    {formImagenUrl &&
+                      (formImagenUrl.includes('drive.google.com') ||
+                        formImagenUrl.includes('googleusercontent.com')) && (
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                          <span>✓</span>
+                          <span>
+                            Archivo de Google Drive detectado y vinculado directamente como foto del modelo.
+                          </span>
+                        </div>
+                      )}
+
                     {formImagenUrl && (
-                      <div className="relative shrink-0">
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
                         <img
                           src={formImagenUrl}
-                          alt="Vista previa"
-                          className="h-10 w-10 rounded-lg border border-slate-200 object-cover bg-white"
+                          alt="Vista previa modelo"
+                          className="h-14 w-14 rounded-lg border border-slate-200 object-cover bg-white shrink-0"
                           onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
+                            const img = e.target as HTMLImageElement;
+                            if (img.src.includes('drive.google.com/thumbnail?id=')) {
+                              const match = img.src.match(/id=([a-zA-Z0-9_-]+)/);
+                              if (match?.[1]) {
+                                img.src = `https://lh3.googleusercontent.com/d/${match[1]}`;
+                                return;
+                              }
+                            }
+                            img.style.display = 'none';
                           }}
                         />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-slate-800 truncate">
+                            {formImagenUrl.startsWith('data:image/')
+                              ? 'Foto cargada desde archivo (Drive / PC)'
+                              : formImagenUrl}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Esta imagen se mostrará en el catálogo y mostrador como modelo visual.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormImagenUrl('');
+                          }}
+                          className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2.5 py-1 rounded-lg hover:bg-rose-50 transition border border-rose-200 shrink-0"
+                          title="Quitar foto"
+                        >
+                          ✕ Quitar
+                        </button>
                       </div>
                     )}
                   </div>

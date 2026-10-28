@@ -242,6 +242,60 @@ export type GuardarCategoriaInput = z.infer<typeof guardarCategoriaSchema>;
 /**
  * Esquemas para Fase 2 — Catálogo de artículos, fraccionamiento, precios y stock vivo.
  */
+/**
+ * Normaliza enlaces de Google Drive (view, open, uc) o Dropbox a URLs directas de imagen
+ * para renderizar directamente en etiquetas <img> sin bloqueos de HTML ni visores.
+ */
+export function normalizarUrlImagen(url: string | null | undefined): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('data:image/')) return trimmed;
+
+  // Enlaces de Google Drive
+  if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com')) {
+    const matchFile = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (matchFile?.[1]) {
+      return `https://drive.google.com/thumbnail?id=${matchFile[1]}&sz=w1000`;
+    }
+    const matchId = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (matchId?.[1]) {
+      return `https://drive.google.com/thumbnail?id=${matchId[1]}&sz=w1000`;
+    }
+    const matchD = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (matchD?.[1]) {
+      return `https://drive.google.com/thumbnail?id=${matchD[1]}&sz=w1000`;
+    }
+  }
+
+  // Dropbox
+  if (trimmed.includes('dropbox.com')) {
+    return trimmed.replace(/\?dl=0$/, '?raw=1').replace(/&dl=0$/, '&raw=1');
+  }
+
+  return trimmed;
+}
+
+export const imagenProductoSchema = z
+  .string()
+  .max(2_500_000)
+  .refine(
+    (val) => {
+      if (!val) return true;
+      if (val.startsWith('data:image/')) return true;
+      try {
+        new URL(val);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Debe ser una URL válida o una imagen en formato data:image' },
+  )
+  .optional()
+  .or(z.literal(''));
+
 export const guardarProductoSchema = z.object({
   id: uuidSchema.optional(),
   rubroId: uuidSchema.optional(),
@@ -250,7 +304,7 @@ export const guardarProductoSchema = z.object({
   nombre: z.string().trim().min(1).max(255),
   marca: z.string().trim().max(100).optional(),
   descripcion: z.string().max(1000).optional(),
-  imagenUrl: z.string().url().max(1000).optional().or(z.literal('')),
+  imagenUrl: imagenProductoSchema,
   codigoQr: z.string().trim().max(255).optional(),
   costoBase: montoNoNegativoSchema,
   unidadPrincipal: z.string().trim().min(1).max(30).default('un'),
