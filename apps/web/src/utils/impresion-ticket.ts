@@ -30,7 +30,7 @@ export interface DatosTicketTermico {
 
 export function imprimirTicketTermico(datos: DatosTicketTermico): void {
   const anchoMm = datos.anchoPapelMm ?? 80;
-  const ventanaImpresion = window.open('', '_blank', 'width=450,height=600');
+  const ventanaImpresion = window.open('', '_blank', 'width=460,height=650');
   if (!ventanaImpresion) {
     alert('Por favor habilitá las ventanas emergentes (popups) para imprimir tickets.');
     return;
@@ -40,18 +40,18 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
     .map(
       (it) => `
       <tr>
-        <td style="text-align: left; padding: 2px 0;">${it.cantidad} x ${it.descripcion}</td>
-        <td style="text-align: right; padding: 2px 0; white-space: nowrap;">$ ${it.subtotal}</td>
+        <td style="text-align: left; padding: 2px 0; vertical-align: top;">
+          <div>${it.descripcion}</div>
+          ${
+            parseFloat(it.cantidad) > 1
+              ? `<div style="font-size: 10px; color: #555;">${it.cantidad} x $ ${it.precioUnitario}</div>`
+              : ''
+          }
+        </td>
+        <td style="text-align: right; padding: 2px 0; white-space: nowrap; vertical-align: top; font-weight: bold;">
+          $ ${it.subtotal}
+        </td>
       </tr>
-      ${
-        parseFloat(it.cantidad) > 1
-          ? `<tr>
-              <td colspan="2" style="font-size: 10px; color: #555; padding-bottom: 2px;">
-                (${it.cantidad} x $ ${it.precioUnitario})
-              </td>
-            </tr>`
-          : ''
-      }
     `,
     )
     .join('');
@@ -65,17 +65,44 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
       <style>
         @page {
           size: ${anchoMm}mm auto;
-          margin: 0;
+          margin: 3mm 4mm;
+        }
+        * {
+          box-sizing: border-box;
         }
         body {
           font-family: 'Courier New', Courier, monospace;
           font-size: 12px;
           line-height: 1.25;
           margin: 0;
-          padding: 8px 10px;
+          padding: 8px 6px;
           width: ${anchoMm === 58 ? '48mm' : '72mm'};
+          max-width: ${anchoMm === 58 ? '48mm' : '72mm'};
           color: #000;
           background: #fff;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .no-print {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: #0f172a;
+          color: #fff;
+          padding: 8px 10px;
+          margin: -8px -6px 12px -6px;
+          font-family: Arial, sans-serif;
+          font-size: 11px;
+        }
+        .no-print button {
+          background: #2563eb;
+          color: #fff;
+          border: none;
+          padding: 5px 10px;
+          border-radius: 4px;
+          font-weight: bold;
+          cursor: pointer;
+          font-size: 11px;
         }
         .text-center { text-align: center; }
         .text-right { text-align: right; }
@@ -84,22 +111,38 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
           border-top: 1px dashed #000;
           margin: 6px 0;
         }
+        .double-divider {
+          border-top: 2px solid #000;
+          margin: 6px 0;
+        }
         table {
           width: 100%;
           border-collapse: collapse;
         }
         .total-box {
-          font-size: 15px;
+          font-size: 14px;
           font-weight: bold;
-          margin: 6px 0;
         }
         @media print {
-          body { width: 100%; }
-          .no-print { display: none; }
+          body {
+            width: 100%;
+            max-width: 100%;
+            padding: 0;
+            margin: 0;
+          }
+          .no-print { display: none !important; }
         }
       </style>
     </head>
     <body>
+      <div class="no-print">
+        <span>Ticket Mostrador</span>
+        <div>
+          <button onclick="window.print()">🖨️ Imprimir</button>
+          <button onclick="window.close()" style="background:#64748b; margin-left:4px;">✕</button>
+        </div>
+      </div>
+
       ${
         datos.logoUrl
           ? `<div class="text-center" style="margin-bottom: 6px;">
@@ -159,7 +202,7 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
         </tbody>
       </table>
 
-      <div class="divider"></div>
+      <div class="double-divider"></div>
 
       <table>
         ${
@@ -175,41 +218,33 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
             : ''
         }
         <tr class="total-box">
-          <td style="text-align: left;">TOTAL:</td>
-          <td style="text-align: right;">$ ${datos.total}</td>
+          <td style="text-align: left; padding: 4px 0;">TOTAL:</td>
+          <td style="text-align: right; padding: 4px 0;">$ ${datos.total}</td>
         </tr>
         <tr>
-          <td style="text-align: left; font-size: 11px;">Medio de Cobro:</td>
+          <td style="text-align: left; font-size: 11px;">Medio de Pago:</td>
           <td style="text-align: right; font-size: 11px; font-weight: bold;">${datos.medioCobro}</td>
         </tr>
       </table>
 
       <div class="divider"></div>
 
-      <div class="text-center" style="font-size: 11px; margin-top: 8px;">
-        <div></div>
-        <div style="font-size: 10px; color: #555; margin-top: 4px;">
-          Comprobante no fiscal - Ticket de control
-        </div>
+      <div class="text-center" style="font-size: 10px; color: #555; margin-top: 6px;">
+        <div>¡Gracias por su compra!</div>
+        <div style="margin-top: 2px;">Comprobante no fiscal - Ticket de control</div>
       </div>
 
       <script>
-        window.onload = function() {
-          window.print();
-          setTimeout(function() {
-            window.close();
-          }, 500);
-        };
+        window.addEventListener('load', function() {
+          setTimeout(function() { window.print(); }, 200);
+        });
       </script>
     </body>
     </html>
   `;
 
-  ventanaImpresion.document.documentElement.innerHTML = html;
-  setTimeout(() => {
-    ventanaImpresion.print();
-    setTimeout(() => {
-      ventanaImpresion.close();
-    }, 500);
-  }, 250);
+  ventanaImpresion.document.open();
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
+  ventanaImpresion.document.write(html);
+  ventanaImpresion.document.close();
 }

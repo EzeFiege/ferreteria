@@ -145,6 +145,7 @@ interface OperadorItem {
 interface ContextoMostrador {
   negocioId: string;
   negocioNombre: string;
+  negocioCondicionIva?: string;
   caja: { id: string; nombre: string };
   cajas?: Array<{ id: string; nombre: string }>;
   mediosPago: MedioPagoItem[];
@@ -292,6 +293,7 @@ export function App(): ReactElement {
   const [efectivoSugerido, setEfectivoSugerido] = useState<string>('0.00');
   const [efectivoInicialInput, setEfectivoInicialInput] =
     useState<string>('0.00');
+  const [condicionIvaEmisor, setCondicionIvaEmisor] = useState<string>('monotributo');
 
   const [resumen, setResumen] = useState<ResumenTurnoEstado | null>(null);
   const [ventasPorMedio, setVentasPorMedio] = useState<VentaPorMedioRubro[]>([]);
@@ -470,6 +472,9 @@ export function App(): ReactElement {
         return null;
       });
         setContexto(data);
+        if (data.negocioCondicionIva) {
+          setCondicionIvaEmisor(data.negocioCondicionIva);
+        }
 
         const medioEfectivo =
           data.mediosPago.find((m) => m.esEfectivo) ?? data.mediosPago[0];
@@ -1168,6 +1173,7 @@ export function App(): ReactElement {
     };
 
     const toquesUsados = toquesVentaActual + 1;
+    const esMonotributo = condicionIvaEmisor === 'monotributo' || condicionIvaEmisor === 'exento';
     const itemsParaFactura =
       itemsCarrito.length > 0
         ? itemsCarrito.map((it) => ({
@@ -1177,7 +1183,7 @@ export function App(): ReactElement {
             unidad: it.nombreUnidad || 'unidad',
             cantidad: it.cantidad,
             precioUnitario: it.precioUnitario,
-            alicuotaIva: '21' as const,
+            alicuotaIva: esMonotributo ? ('0' as const) : ('21' as const),
             subtotal: it.subtotal,
           }))
         : [
@@ -1186,14 +1192,15 @@ export function App(): ReactElement {
               unidad: 'unidad',
               cantidad: '1.000',
               precioUnitario: montoVentaFormateado,
-              alicuotaIva: '21' as const,
+              alicuotaIva: esMonotributo ? ('0' as const) : ('21' as const),
               subtotal: montoVentaFormateado,
             },
           ];
 
     const debeFacturar = emitirFacturaElectronica && !modoSinConexion;
-    const tipoCmp =
-      clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
+    const tipoCmp = esMonotributo
+      ? ('factura_c' as const)
+      : clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
         ? ('factura_a' as const)
         : ('factura_b' as const);
     const clienteIdFact = clienteSeleccionadoVenta?.id ?? null;
@@ -2203,6 +2210,7 @@ export function App(): ReactElement {
           <FacturacionFiscal
             token={operadorActivo.token}
             rolUsuario={operadorActivo.rol}
+            condicionIvaEmisor={condicionIvaEmisor}
           />
         )}
         {pestana === 'tesoreria' && (
@@ -2318,6 +2326,9 @@ export function App(): ReactElement {
               }
             }}
             onCatalogosActualizados={recargarContextoMostrador}
+            onEmpresaActualizada={(nuevaCond) => {
+              setCondicionIvaEmisor(nuevaCond);
+            }}
           />
         )}
 
@@ -2924,9 +2935,11 @@ export function App(): ReactElement {
                             🧾 Emitir Factura Electrónica ARCA
                           </span>
                           <p className="text-[11px] text-slate-500">
-                            {clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
-                              ? 'Emitirá Factura A (Cliente Resp. Inscripto)'
-                              : 'Emitirá Factura B (Consumidor Final)'}
+                            {condicionIvaEmisor === 'monotributo' || condicionIvaEmisor === 'exento'
+                              ? 'Emitirá Factura C (Comprobante oficial Monotributo)'
+                              : clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
+                                ? 'Emitirá Factura A (Cliente Resp. Inscripto)'
+                                : 'Emitirá Factura B (Consumidor Final)'}
                           </p>
                         </div>
                       </div>
@@ -2937,9 +2950,11 @@ export function App(): ReactElement {
                             : 'bg-slate-200 text-slate-600'
                         }`}
                       >
-                        {clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
-                          ? 'FACTURA A'
-                          : 'FACTURA B'}
+                        {condicionIvaEmisor === 'monotributo' || condicionIvaEmisor === 'exento'
+                          ? 'FACTURA C'
+                          : clienteSeleccionadoVenta?.condicionIva === 'responsable_inscripto'
+                            ? 'FACTURA A'
+                            : 'FACTURA B'}
                       </span>
                     </label>
                   </div>

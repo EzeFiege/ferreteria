@@ -24,12 +24,15 @@ export interface PuntoVentaItem {
 export interface FacturacionFiscalProps {
   token: string;
   rolUsuario: RolUsuario;
+  condicionIvaEmisor?: string | undefined;
 }
 
 export function FacturacionFiscal({
   token,
   rolUsuario,
+  condicionIvaEmisor,
 }: FacturacionFiscalProps): ReactElement {
+  const esMonotributo = condicionIvaEmisor === 'monotributo' || condicionIvaEmisor === 'exento';
   const [subpestana, setSubpestana] = useState<'comprobantes' | 'puntos_venta'>('comprobantes');
   const [comprobantes, setComprobantes] = useState<ComprobanteFiscalDetalle[]>([]);
   const [puntosVenta, setPuntosVenta] = useState<PuntoVentaItem[]>([]);
@@ -44,7 +47,9 @@ export function FacturacionFiscal({
 
   // Form emisión factura
   const [formPvNumero, setFormPvNumero] = useState<number>(1);
-  const [formTipoComp, setFormTipoComp] = useState<TipoComprobanteFiscal>('factura_b');
+  const [formTipoComp, setFormTipoComp] = useState<TipoComprobanteFiscal>(
+    esMonotributo ? 'factura_c' : 'factura_b',
+  );
   const [formRazonSocial, setFormRazonSocial] = useState<string>('Consumidor Final');
   const [formCuitCliente, setFormCuitCliente] = useState<string>('');
   const [formCondicionIva, setFormCondicionIva] = useState<CondicionIva>('consumidor_final');
@@ -533,11 +538,21 @@ export function FacturacionFiscal({
                     }}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-800 focus:outline-none font-bold"
                   >
-                    <option value="factura_b">Factura B (Consumidor Final / Exento)</option>
-                    <option value="factura_a">Factura A (Responsable Inscripto con CUIT)</option>
-                    <option value="factura_c">Factura C (Monotributo / Otros)</option>
-                    <option value="nota_credito_b">Nota de Crédito B</option>
-                    <option value="nota_credito_a">Nota de Crédito A</option>
+                    {esMonotributo ? (
+                      <>
+                        <option value="factura_c">Factura C (Oficial Monotributo)</option>
+                        <option value="nota_credito_c">Nota de Crédito C</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="factura_b">Factura B (Consumidor Final / Exento)</option>
+                        <option value="factura_a">Factura A (Responsable Inscripto con CUIT)</option>
+                        <option value="factura_c">Factura C (Monotributo / Otros)</option>
+                        <option value="nota_credito_b">Nota de Crédito B</option>
+                        <option value="nota_credito_a">Nota de Crédito A</option>
+                        <option value="nota_credito_c">Nota de Crédito C</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>

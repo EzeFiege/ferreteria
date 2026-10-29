@@ -16,6 +16,7 @@ import {
   imprimirComprobanteFiscal,
   type DatosEmisorFiscal,
 } from './utils/impresion-factura.js';
+import { imprimirTicketTermico } from './utils/impresion-ticket.js';
 
 interface MedioPagoConfigItem {
   id: string;
@@ -52,6 +53,7 @@ export interface ConfiguracionPilotoProps {
   efectivoEsperadoActual: string;
   onSolicitarRolDueno: () => void;
   onCatalogosActualizados: () => Promise<void>;
+  onEmpresaActualizada?: (condicionIva: string) => void;
 }
 
 const STORAGE_KEY_PILOTO = 'ferreteria_bitacora_piloto_v1';
@@ -70,6 +72,7 @@ export function ConfiguracionPiloto({
   efectivoEsperadoActual,
   onSolicitarRolDueno,
   onCatalogosActualizados,
+  onEmpresaActualizada,
 }: ConfiguracionPilotoProps): ReactElement {
   const [tabActiva, setTabActiva] = useState<
     | 'empresa'
@@ -116,6 +119,9 @@ export function ConfiguracionPiloto({
   const [emailEmpresa, setEmailEmpresa] = useState<string>('');
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [leyendaTicket, setLeyendaTicket] = useState<string>('');
+  const [modeloPrueba, setModeloPrueba] = useState<
+    'factura_c' | 'factura_b' | 'factura_a' | 'ticket_control'
+  >('factura_c');
 
   // Gestión de Usuarios
   const [usuarios, setUsuarios] = useState<UsuarioItemAdmin[]>([]);
@@ -204,6 +210,7 @@ export function ConfiguracionPiloto({
         setEmailEmpresa(emp.email || '');
         setLogoUrl(emp.logoUrl || '');
         setLeyendaTicket(emp.leyendaTicket || '');
+        setModeloPrueba(emp.condicionIva === 'monotributo' ? 'factura_c' : 'factura_b');
       }
     } catch {
       setErrorMsg('No se pudieron cargar los datos de la empresa.');
@@ -379,28 +386,66 @@ export function ConfiguracionPiloto({
       logoUrl: logoUrl.trim() || undefined,
     };
 
+    if (modeloPrueba === 'ticket_control') {
+      imprimirTicketTermico({
+        nombreComercio: nombreComercial.trim() || razonSocial.trim() || 'FERRETERÍA & CORRALÓN',
+        logoUrl: logoUrl.trim() || undefined,
+        cuitComercio: cuit.trim() || undefined,
+        direccionComercio: domicilioComercial.trim() || undefined,
+        telefonoComercio: telefono.trim() || undefined,
+        numeroTicket: '0001-00001001',
+        fechaHora: new Date().toLocaleString('es-AR'),
+        cajeroNombre: 'Cajero Mostrador (Prueba)',
+        clienteNombre: 'Cliente Ocasional',
+        items: [
+          {
+            cantidad: '2.000',
+            descripcion: 'Tornillo Autoperforante Fix 4x40mm (Caja x 100)',
+            precioUnitario: '3500.00',
+            subtotal: '7000.00',
+          },
+          {
+            cantidad: '1.000',
+            descripcion: 'Cinta Pasacable Alma de Acero 10m',
+            precioUnitario: '5100.00',
+            subtotal: '5100.00',
+          },
+        ],
+        subtotal: '12100.00',
+        total: '12100.00',
+        medioCobro: 'Efectivo',
+        anchoPapelMm: 80,
+      });
+      return;
+    }
+
+    const esC = modeloPrueba === 'factura_c';
+    const esA = modeloPrueba === 'factura_a';
+
     const compMuestra: ComprobanteFiscalDetalle = {
       id: '00000000-0000-0000-0000-000000000001',
       puntoVentaNumero: afipPuntoVenta || 1,
-      tipoComprobante: 'factura_b',
+      tipoComprobante: esC ? 'factura_c' : esA ? 'factura_a' : 'factura_b',
       numeroComprobante: 1001,
-      codigoAfip: 6,
+      codigoAfip: esC ? 11 : esA ? 1 : 6,
       fechaEmision: hoyIsoLocal(),
       ventaId: null,
-      cuitCliente: '20-12345678-9',
-      razonSocialCliente: 'CLIENTE MOSTRADOR (PRUEBA)',
-      condicionIvaCliente: 'consumidor_final',
-      subtotalNetoGravado: '10000.00',
-      subtotalIva21: '2100.00',
+      cuitCliente: esA ? '30-76543210-9' : '20-12345678-9',
+      razonSocialCliente: esA
+        ? 'OBRAS & ESTRUCTURAS S.A.'
+        : 'CLIENTE MOSTRADOR (PRUEBA)',
+      condicionIvaCliente: esA ? 'responsable_inscripto' : 'consumidor_final',
+      subtotalNetoGravado: esC ? '0.00' : '10000.00',
+      subtotalIva21: esC ? '0.00' : '2100.00',
       subtotalIva105: '0.00',
       subtotalIva27: '0.00',
-      subtotalExento: '0.00',
+      subtotalExento: esC ? '12100.00' : '0.00',
       total: '12100.00',
       estado: 'autorizado',
       cae: afipCai ? afipCai : '74123456789012',
       vencimientoCae: afipVencimientoCai ? afipVencimientoCai : '2026-11-06',
       codigoQrArca:
-        'https://www.afip.gob.ar/fe/qr/?p=eyJ2ZXIiOjEsImZlY2hhIjoiMjAyNi0xMC0yNyIsImN1aXQiOjMwNzEyMzQ1Njc4LCJwdG9WdGEiOjEsInRpcG9DbXAiOjYsIm5yb0NtcCI6MTAwMSwiaW1wb3J0ZSI6MTIxMDAsIm1vbmVkYSI6IlBFUyIsImN0eiI6MSwidGlwb0RvY1JlYyI6OTksIm5yb0RvY1JlYyI6MCwidGlwb0NvZEF1dCI6IkUiLCJjb2RBdXQiOjc0MTIzNDU2Nzg5MDEyfQ==',
+        'https://www.afip.gob.ar/fe/qr/?p=eyJ2ZXIiOjEsImZlY2hhIjoiMjAyNi0xMC0yOSIsImN1aXQiOjMwNzEyMzQ1Njc4LCJwdG9WdGEiOjEsInRpcG9DbXAiOjExLCJucm9DbXAiOjEwMDEsImltcG9ydGUiOjEyMTAwLCJtb25lZGEiOiJQRVMiLCJjdHoiOjEsInRpcG9Eb2NSZWMiOjk5LCJucm9Eb2NSZWMiOjAsInRpcG9Db2RBdXQiOiJFIiwiY29kQXV0Ijo3NDEyMzQ1Njc4OTAxMn0=',
       creadoEn: new Date().toISOString(),
       items: [
         {
@@ -412,7 +457,7 @@ export function ConfiguracionPiloto({
           unidad: 'caja',
           cantidad: '2.000',
           precioUnitario: '3500.00',
-          alicuotaIva: '21',
+          alicuotaIva: esC ? '0' : '21',
           subtotal: '7000.00',
           creadoEn: new Date().toISOString(),
         },
@@ -425,7 +470,7 @@ export function ConfiguracionPiloto({
           unidad: 'un',
           cantidad: '1.000',
           precioUnitario: '5100.00',
-          alicuotaIva: '21',
+          alicuotaIva: esC ? '0' : '21',
           subtotal: '5100.00',
           creadoEn: new Date().toISOString(),
         },
@@ -476,6 +521,9 @@ export function ConfiguracionPiloto({
 
       setMensaje('Datos comerciales y de branding guardados exitosamente.');
       await cargarEmpresa();
+      if (onEmpresaActualizada) {
+        onEmpresaActualizada(condicionIva);
+      }
     } catch {
       setErrorMsg('Error de red al guardar los datos de la empresa.');
     }
@@ -1316,33 +1364,110 @@ export function ConfiguracionPiloto({
             </div>
 
             {/* Panel de Prueba de Impresión en Papel */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Prueba de Impresión en Papel
-                </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Probá cómo salen tus facturas y tickets en tu impresora física usando los datos cargados.
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <span>🖨️</span> Modelos de Impresión y Prueba en Papel
+                  </h4>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                      condicionIva === 'monotributo'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-blue-50 text-blue-700 border border-blue-200'
+                    }`}
+                  >
+                    {condicionIva === 'monotributo'
+                      ? 'Categoría: Monotributista (Factura C)'
+                      : 'Categoría: Resp. Inscripto (Facturas A y B)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Probá cómo salen tus facturas electrónicas y tickets en tu impresora física (A4 o comanderas térmicas de 80mm) con los datos y CAE/CAI de tu negocio.
                 </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  data-testid="btn-probar-factura-a4"
-                  onClick={() => { probarImpresionComprobante('a4'); }}
-                  className="rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 flex items-center justify-center gap-1.5 transition active:scale-98"
-                >
-                  <span>📄</span>
-                  <span>Probar Factura A4</span>
-                </button>
+
+              {/* Selector de modelo de comprobante */}
+              <div className="rounded-xl bg-slate-50 p-3 border border-slate-200 space-y-2">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  Seleccionar modelo de comprobante a probar:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setModeloPrueba('factura_c'); }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center text-center ${
+                      modeloPrueba === 'factura_c'
+                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600 ring-offset-1'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>Factura C</span>
+                    <span className="text-[10px] font-normal opacity-90">Monotributo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setModeloPrueba('factura_b'); }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center text-center ${
+                      modeloPrueba === 'factura_b'
+                        ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-600 ring-offset-1'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>Factura B</span>
+                    <span className="text-[10px] font-normal opacity-90">Cons. Final</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setModeloPrueba('factura_a'); }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center text-center ${
+                      modeloPrueba === 'factura_a'
+                        ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600 ring-offset-1'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>Factura A</span>
+                    <span className="text-[10px] font-normal opacity-90">Resp. Inscripto</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setModeloPrueba('ticket_control'); }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center text-center ${
+                      modeloPrueba === 'ticket_control'
+                        ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-900 ring-offset-1'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>Ticket Caja</span>
+                    <span className="text-[10px] font-normal opacity-90">No Fiscal</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Botones de acción según formato */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {modeloPrueba !== 'ticket_control' && (
+                  <button
+                    type="button"
+                    data-testid="btn-probar-factura-a4"
+                    onClick={() => { probarImpresionComprobante('a4'); }}
+                    className="rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 flex items-center justify-center gap-2 transition active:scale-98"
+                  >
+                    <span>📄</span>
+                    <span>Probar en Hoja A4</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   data-testid="btn-probar-ticket-termico"
                   onClick={() => { probarImpresionComprobante('termico_80mm'); }}
-                  className="rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 flex items-center justify-center gap-1.5 transition active:scale-98"
+                  className="rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 flex items-center justify-center gap-2 transition active:scale-98"
                 >
                   <span>🧾</span>
-                  <span>Probar Ticket 80mm</span>
+                  <span>Probar Ticket Térmico 80mm</span>
                 </button>
               </div>
             </div>

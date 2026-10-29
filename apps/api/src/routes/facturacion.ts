@@ -303,7 +303,14 @@ export function registerFacturacionRoutes(
           let iva27 = '0.00';
           let exento = '0.00';
 
-          if (body.alicuotaIva === '21') {
+          if (body.tipoComprobante.includes('_c')) {
+            // Comprobantes clase C (Monotributistas / Exentos) no discriminan IVA
+            netoGravado = '0.00';
+            iva21 = '0.00';
+            iva105 = '0.00';
+            iva27 = '0.00';
+            exento = totalNum.toFixed(2);
+          } else if (body.alicuotaIva === '21') {
             const neto = totalNum / 1.21;
             const iva = totalNum - neto;
             netoGravado = neto.toFixed(2);
