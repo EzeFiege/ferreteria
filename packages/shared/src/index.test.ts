@@ -281,4 +281,49 @@ describe('@ferreteria/shared schemas y aritmética de dinero', () => {
     });
     expect(resDataUri.success).toBe(true);
   });
+
+  it('aplica reglas de redondeo comercial para facilitar cambio en efectivo', () => {
+    // 1. Sin redondeo
+    expect(aplicarRedondeoPrecio('1234.56', 'ninguno')).toBe('1234.56');
+
+    // 2. Al entero ($1.00)
+    expect(aplicarRedondeoPrecio('1234.40', 'entero')).toBe('1234.00');
+    expect(aplicarRedondeoPrecio('1234.50', 'entero')).toBe('1235.00');
+    expect(aplicarRedondeoPrecio('1234.60', 'entero')).toBe('1235.00');
+
+    // 3. Múltiplo de $ 10
+    expect(aplicarRedondeoPrecio('1234.00', 'multiplo_10')).toBe('1230.00');
+    expect(aplicarRedondeoPrecio('1235.00', 'multiplo_10')).toBe('1240.00');
+    expect(aplicarRedondeoPrecio('1236.00', 'multiplo_10')).toBe('1240.00');
+
+    // 4. Múltiplo de $ 50
+    expect(aplicarRedondeoPrecio('1224.00', 'multiplo_50')).toBe('1200.00');
+    expect(aplicarRedondeoPrecio('1225.00', 'multiplo_50')).toBe('1250.00');
+    expect(aplicarRedondeoPrecio('1240.00', 'multiplo_50')).toBe('1250.00');
+
+    // 5. Múltiplo de $ 100
+    expect(aplicarRedondeoPrecio('1249.00', 'multiplo_100')).toBe('1200.00');
+    expect(aplicarRedondeoPrecio('1250.00', 'multiplo_100')).toBe('1300.00');
+
+    // 6. Múltiplo de $ 500
+    expect(aplicarRedondeoPrecio('1240.00', 'multiplo_500')).toBe('1000.00');
+    expect(aplicarRedondeoPrecio('1250.00', 'multiplo_500')).toBe('1500.00');
+
+    // 7. Múltiplo de $ 1.000
+    expect(aplicarRedondeoPrecio('1490.00', 'multiplo_1000')).toBe('1000.00');
+    expect(aplicarRedondeoPrecio('1500.00', 'multiplo_1000')).toBe('2000.00');
+
+    // 8. Hacia arriba a $ 10, $ 50, $ 100, $ 500, $ 1.000
+    expect(aplicarRedondeoPrecio('1231.00', 'hacia_arriba_10')).toBe('1240.00');
+    expect(aplicarRedondeoPrecio('1230.00', 'hacia_arriba_10')).toBe('1230.00');
+
+    expect(aplicarRedondeoPrecio('1201.00', 'hacia_arriba_50')).toBe('1250.00');
+    expect(aplicarRedondeoPrecio('1250.00', 'hacia_arriba_50')).toBe('1250.00');
+
+    expect(aplicarRedondeoPrecio('1201.00', 'hacia_arriba_100')).toBe('1300.00');
+    expect(aplicarRedondeoPrecio('1200.00', 'hacia_arriba_100')).toBe('1200.00');
+
+    expect(aplicarRedondeoPrecio('1005.00', 'hacia_arriba_500')).toBe('1500.00');
+    expect(aplicarRedondeoPrecio('1005.00', 'hacia_arriba_1000')).toBe('2000.00');
+  });
 });

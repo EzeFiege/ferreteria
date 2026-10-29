@@ -185,6 +185,7 @@ export const listaPrecio = pgTable('lista_precio', {
   margenPct: numeric('margen_pct', { precision: 5, scale: 2 })
     .notNull()
     .default('0.00'),
+  redondeo: text('redondeo').notNull().default('ninguno'),
   activo: boolean('activo').notNull().default(true),
   orden: integer('orden').notNull().default(1),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),

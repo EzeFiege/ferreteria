@@ -6,6 +6,7 @@ import {
   formatearMensajeTicket,
   generarLinkWhatsApp,
   type ReglaDescuentoVolumenItem,
+  type ReglaRedondeoPrecios,
   type RolUsuario,
 } from '@ferreteria/shared';
 import {
@@ -70,6 +71,7 @@ export interface ListaPrecioItem {
   nombre: string;
   margenPct: string;
   orden: number;
+  redondeo?: ReglaRedondeoPrecios;
 }
 
 export function calcularSubtotalCentavos(

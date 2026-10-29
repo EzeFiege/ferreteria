@@ -3,11 +3,33 @@ import type {
   CrearListaPrecioInput,
   CrearReglaVolumenInput,
   FijarPrecioProductoListaInput,
+  GuardarListaPrecioInput,
   ReglaDescuentoVolumenItem,
+  ReglaRedondeoPrecios,
   RolUsuario,
 } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { formatearPesos, type ListaPrecioItem } from './App.js';
+
+export const OPCIONES_REDONDEO: Array<{ valor: ReglaRedondeoPrecios; etiqueta: string; desc: string }> = [
+  { valor: 'ninguno', etiqueta: 'Sin redondeo', desc: 'Mantiene centavos exactos ($ 1.234,56)' },
+  { valor: 'entero', etiqueta: 'Al entero ($ 1)', desc: 'Redondea a número redondo sin centavos ($ 1.235,00)' },
+  { valor: 'multiplo_10', etiqueta: 'Múltiplo de $ 10', desc: 'Múltiplo de 10 más cercano ($ 1.230 o $ 1.240)' },
+  { valor: 'multiplo_50', etiqueta: 'Múltiplo de $ 50', desc: 'Múltiplo de 50 más cercano ($ 1.250)' },
+  { valor: 'multiplo_100', etiqueta: 'Múltiplo de $ 100', desc: 'Múltiplo de 100 más cercano ($ 1.200 o $ 1.300)' },
+  { valor: 'multiplo_500', etiqueta: 'Múltiplo de $ 500', desc: 'Múltiplo de 500 más cercano ($ 1.000 o $ 1.500)' },
+  { valor: 'multiplo_1000', etiqueta: 'Múltiplo de $ 1.000', desc: 'Múltiplo de 1.000 más cercano ($ 1.000 o $ 2.000)' },
+  { valor: 'hacia_arriba_10', etiqueta: 'Hacia arriba a $ 10', desc: 'Siempre redondea arriba al prox $ 10' },
+  { valor: 'hacia_arriba_50', etiqueta: 'Hacia arriba a $ 50', desc: 'Siempre redondea arriba al prox $ 50' },
+  { valor: 'hacia_arriba_100', etiqueta: 'Hacia arriba a $ 100', desc: 'Siempre redondea arriba al prox $ 100' },
+  { valor: 'hacia_arriba_500', etiqueta: 'Hacia arriba a $ 500', desc: 'Siempre redondea arriba al prox $ 500' },
+  { valor: 'hacia_arriba_1000', etiqueta: 'Hacia arriba a $ 1.000', desc: 'Siempre redondea arriba al prox $ 1.000' },
+];
+
+export function obtenerEtiquetaRedondeo(regla?: string): string {
+  const match = OPCIONES_REDONDEO.find((o) => o.valor === regla);
+  return match ? match.etiqueta : 'Sin redondeo';
+}
 
 export interface GestionListasYReglasProps {
   token: string;
@@ -39,6 +61,14 @@ export function GestionListasYReglas({
   const [nombreNuevaLista, setNombreNuevaLista] = useState<string>('');
   const [margenNuevaLista, setMargenNuevaLista] = useState<string>('30.00');
   const [ordenNuevaLista, setOrdenNuevaLista] = useState<number>(3);
+  const [redondeoNuevaLista, setRedondeoNuevaLista] = useState<ReglaRedondeoPrecios>('ninguno');
+
+  // Modal / Edición de lista existente
+  const [listaEditando, setListaEditando] = useState<ListaPrecioItem | null>(null);
+  const [nombreEdit, setNombreEdit] = useState<string>('');
+  const [margenEdit, setMargenEdit] = useState<string>('');
+  const [ordenEdit, setOrdenEdit] = useState<number>(1);
+  const [redondeoEdit, setRedondeoEdit] = useState<ReglaRedondeoPrecios>('ninguno');
 
   // Reglas de volumen
   const [reglas, setReglas] = useState<ReglaDescuentoVolumenItem[]>([]);
@@ -123,6 +153,7 @@ export function GestionListasYReglas({
         margenPct: margenNuevaLista,
         orden: ordenNuevaLista,
         activo: true,
+        redondeo: redondeoNuevaLista,
       };
       const res = await fetch(apiUrl('/api/listas-precios'), {
         method: 'POST',
@@ -138,6 +169,47 @@ export function GestionListasYReglas({
       }
       setMensaje(`Lista "${nombreNuevaLista.trim()}" creada con éxito.`);
       setNombreNuevaLista('');
+      setRedondeoNuevaLista('ninguno');
+      void cargarListas();
+      if (onListasActualizadas) onListasActualizadas();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // Guardar edición de lista existente (margen, orden, redondeo)
+  const guardarEdicionLista = async () => {
+    if (!listaEditando) return;
+    if (!nombreEdit.trim()) {
+      setErrorMsg('El nombre de la lista no puede estar vacío');
+      return;
+    }
+    setGuardando(true);
+    setErrorMsg(null);
+    try {
+      const payload: GuardarListaPrecioInput = {
+        nombre: nombreEdit.trim(),
+        margenPct: margenEdit,
+        orden: ordenEdit,
+        activo: true,
+        redondeo: redondeoEdit,
+      };
+      const res = await fetch(apiUrl(`/api/listas-precios/${listaEditando.id}`), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? 'Error al actualizar lista de precios');
+      }
+      setMensaje(`Lista "${nombreEdit.trim()}" actualizada con éxito.`);
+      setListaEditando(null);
       void cargarListas();
       if (onListasActualizadas) onListasActualizadas();
     } catch (err: unknown) {
@@ -436,6 +508,25 @@ export function GestionListasYReglas({
                 </div>
               </div>
 
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                  Redondeo Comercial (para cambio en efectivo)
+                </label>
+                <select
+                  value={redondeoNuevaLista}
+                  onChange={(e) => {
+                    setRedondeoNuevaLista(e.target.value as ReglaRedondeoPrecios);
+                  }}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                >
+                  {OPCIONES_REDONDEO.map((op) => (
+                    <option key={op.valor} value={op.valor}>
+                      {op.etiqueta} — {op.desc}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 type="button"
                 disabled={guardando || !esDueno}
@@ -474,17 +565,37 @@ export function GestionListasYReglas({
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400">
-                        Orden de visualización: #{lp.orden}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[11px] text-slate-400">
+                          Orden: #{lp.orden}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                          🪙 {obtenerEtiquetaRedondeo(lp.redondeo)}
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {esDueno && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setListaEditando(lp);
+                            setNombreEdit(lp.nombre);
+                            setMargenEdit(lp.margenPct);
+                            setOrdenEdit(lp.orden);
+                            setRedondeoEdit(lp.redondeo ?? 'ninguno');
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-bold px-2 py-1 rounded hover:bg-blue-50 transition"
+                        >
+                          ✏️ Modificar
+                        </button>
+                      )}
                       {lp.nombre.toLowerCase() !== 'mostrador' && esDueno && (
                         <button
                           type="button"
                           onClick={() => { void eliminarLista(lp.id, lp.nombre); }}
-                          className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1"
+                          className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1 rounded hover:bg-rose-50 transition"
                         >
                           Eliminar
                         </button>
@@ -495,6 +606,105 @@ export function GestionListasYReglas({
               </div>
             )}
           </div>
+
+          {/* Modal Edición de Lista */}
+          {listaEditando && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    Modificar Lista: {listaEditando.nombre}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => { setListaEditando(null); }}
+                    className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Nombre</label>
+                    <input
+                      type="text"
+                      value={nombreEdit}
+                      disabled={listaEditando.nombre.toLowerCase() === 'mostrador'}
+                      onChange={(e) => { setNombreEdit(e.target.value); }}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
+                    />
+                    {listaEditando.nombre.toLowerCase() === 'mostrador' && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        El nombre de la lista Mostrador base no se puede cambiar.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Margen %</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={margenEdit}
+                        onChange={(e) => { setMargenEdit(e.target.value); }}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 block mb-1">Orden</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={ordenEdit}
+                        onChange={(e) => { setOrdenEdit(parseInt(e.target.value, 10) || 1); }}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                      Regla de Redondeo (facilita dar cambio en efectivo)
+                    </label>
+                    <select
+                      value={redondeoEdit}
+                      onChange={(e) => { setRedondeoEdit(e.target.value as ReglaRedondeoPrecios); }}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                    >
+                      {OPCIONES_REDONDEO.map((op) => (
+                        <option key={op.valor} value={op.valor}>
+                          {op.etiqueta} — {op.desc}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Los precios de venta calculados se ajustarán según esta regla para evitar centavos y agilizar el cobro en mostrador.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                  <button
+                    type="button"
+                    onClick={() => { setListaEditando(null); }}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={guardando}
+                    onClick={() => { void guardarEdicionLista(); }}
+                    className="px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow disabled:opacity-50"
+                  >
+                    {guardando ? 'Guardando...' : 'Guardar Cambios'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -596,6 +596,11 @@ Estado:
     - Tab 1: Administración de listas de precios (creación, visualización de márgenes y eliminación).
     - Tab 2: Gestor de reglas de descuento por volumen (por rubro o producto, cantidad mínima, % off, pausa/activación).
     - Tab 3: Fijación manual de precios fijos por lista con buscador en vivo de artículos.
+- [x] Mejora comercial: Redondeo de precios por lista para cobro ágil en efectivo:
+  - Migración SQL `db/migrations/022_redondeo_listas_precios.sql`: columna `redondeo` en `lista_precio`, función `fn_aplicar_redondeo_precio` y vista `v_precios_producto` con redondeo en PostgreSQL.
+  - Esquema y lógica en `@ferreteria/shared`: `reglaRedondeoPreciosSchema` con 12 reglas de redondeo comercial y función `aplicarRedondeoPrecio` en BigInt (Regla 3).
+  - Backend API: soporte de `redondeo` en creación (`POST`) y actualización (`PUT`) de listas de precios con test de integración en Vitest.
+  - Frontend Web: selector de redondeo en creación, badge informativo en el listado y modal de modificación de listas en `GestionListasYReglas.tsx`, y vista previa en `CatalogoStock.tsx`.
   - Carrito de venta en mostrador (`apps/web/src/App.tsx`):
     - Detección y aplicación inmediata de bonificaciones por cantidad con etiqueta visual `🏷️ {promo} (-{pct}%)`.
     - Selector ágil de lista de precios que **recalcula automáticamente** los precios y subtotales de todos los ítems cargados en el carrito al alternar entre Mostrador, Gremio o Mayorista.

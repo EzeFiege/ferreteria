@@ -322,4 +322,50 @@ describe('Fase 17A — Listas de Precios Múltiples y Reglas de Descuento por Vo
     });
     expect(resDelB.statusCode).toBe(404);
   });
+
+  it('aplica reglas de redondeo comercial configuradas en la lista de precios en la vista v_precios_producto', async () => {
+    // 1. Crear una lista "Efectivo Redondeado" con margen de 33.33% y redondeo hacia_arriba_100
+    // Costo base = $100.00 -> Con margen 33.33% = $133.33 -> Con hacia_arriba_100 = $200.00
+    const resCrear = await app.inject({
+      method: 'POST',
+      url: '/listas-precios',
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Efectivo Redondeado',
+        margenPct: '33.33',
+        orden: 5,
+        redondeo: 'hacia_arriba_100',
+      },
+    });
+    expect(resCrear.statusCode).toBe(201);
+    const body = resCrear.json<{ id: string; redondeo: string }>();
+    expect(body.redondeo).toBe('hacia_arriba_100');
+
+    // Consultar en la vista v_precios_producto
+    const vRes = await adminPool.query<{ lista_nombre: string; precio_venta_principal: string }>(
+      'select lista_nombre, precio_venta_principal from v_precios_producto where producto_id = $1 and lista_precio_id = $2',
+      [negocioA.productoTornilloId, body.id],
+    );
+    expect(vRes.rows[0]?.precio_venta_principal).toBe('200.00');
+
+    // 2. Modificar la lista para usar multiplo_50 (133.33 redondea al múltiplo de 50 más cercano = 150.00)
+    const resModif = await app.inject({
+      method: 'PUT',
+      url: `/listas-precios/${body.id}`,
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Efectivo Redondeado',
+        margenPct: '33.33',
+        orden: 5,
+        redondeo: 'multiplo_50',
+      },
+    });
+    expect(resModif.statusCode).toBe(200);
+
+    const vRes2 = await adminPool.query<{ lista_nombre: string; precio_venta_principal: string }>(
+      'select lista_nombre, precio_venta_principal from v_precios_producto where producto_id = $1 and lista_precio_id = $2',
+      [negocioA.productoTornilloId, body.id],
+    );
+    expect(vRes2.rows[0]?.precio_venta_principal).toBe('150.00');
+  });
 });

@@ -317,10 +317,74 @@ export const guardarProductoSchema = z.object({
 });
 export type GuardarProductoInput = z.infer<typeof guardarProductoSchema>;
 
+export const reglaRedondeoPreciosSchema = z.enum([
+  'ninguno',
+  'entero',
+  'multiplo_10',
+  'multiplo_50',
+  'multiplo_100',
+  'multiplo_500',
+  'multiplo_1000',
+  'hacia_arriba_10',
+  'hacia_arriba_50',
+  'hacia_arriba_100',
+  'hacia_arriba_500',
+  'hacia_arriba_1000',
+]);
+export type ReglaRedondeoPrecios = z.infer<typeof reglaRedondeoPreciosSchema>;
+
+/**
+ * Aplica una regla de redondeo comercial a un importe expresado como string decimal.
+ * Respeta la regla 3 de AGENTS.md operando en centavos enteros con BigInt.
+ */
+export function aplicarRedondeoPrecio(
+  monto: string,
+  regla: ReglaRedondeoPrecios,
+): string {
+  const centavos = aCentavos(monto);
+  if (regla === 'ninguno' || centavos <= 0n) {
+    return monto;
+  }
+
+  const esHaciaArriba = regla.startsWith('hacia_arriba_');
+  let baseCentavos = 100n; // 'entero' = $1.00 = 100 centavos
+  if (regla === 'multiplo_10' || regla === 'hacia_arriba_10') {
+    baseCentavos = 1000n; // $10.00
+  } else if (regla === 'multiplo_50' || regla === 'hacia_arriba_50') {
+    baseCentavos = 5000n; // $50.00
+  } else if (regla === 'multiplo_100' || regla === 'hacia_arriba_100') {
+    baseCentavos = 10000n; // $100.00
+  } else if (regla === 'multiplo_500' || regla === 'hacia_arriba_500') {
+    baseCentavos = 50000n; // $500.00
+  } else if (regla === 'multiplo_1000' || regla === 'hacia_arriba_1000') {
+    baseCentavos = 100000n; // $1000.00
+  }
+
+  const resto = centavos % baseCentavos;
+  if (resto === 0n) {
+    return deCentavos(centavos);
+  }
+
+  let redondeado = centavos;
+  if (esHaciaArriba) {
+    redondeado = centavos + (baseCentavos - resto);
+  } else {
+    // Redondeo aritmético estándar al múltiplo más cercano
+    const mitad = baseCentavos / 2n;
+    redondeado =
+      resto >= mitad
+        ? centavos + (baseCentavos - resto)
+        : centavos - resto;
+  }
+
+  return deCentavos(redondeado > 0n ? redondeado : baseCentavos);
+}
+
 export const guardarListaPrecioSchema = z.object({
   id: uuidSchema.optional(),
   nombre: z.string().trim().min(1).max(100),
   margenPct: comisionPctSchema,
+  redondeo: reglaRedondeoPreciosSchema.optional().default('ninguno'),
   activo: z.boolean().optional(),
   orden: z.number().int().min(1).max(100).optional(),
 });
@@ -1247,6 +1311,7 @@ export interface DetalleInventarioFisico {
 export const crearListaPrecioSchema = z.object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio').max(100),
   margenPct: comisionPctSchema,
+  redondeo: reglaRedondeoPreciosSchema.optional().default('ninguno'),
   orden: z.number().int().min(1).max(100).optional().default(1),
   activo: z.boolean().optional().default(true),
 });
@@ -1565,15 +1630,6 @@ export interface AcopioDetalleCompleto {
 // Fase 19 — Actualizador Masivo de Precios
 // -------------------------------------------------------------
 
-export const reglaRedondeoPreciosSchema = z.enum([
-  'ninguno',
-  'entero',
-  'multiplo_10',
-  'multiplo_50',
-  'multiplo_100',
-]);
-export type ReglaRedondeoPrecios = z.infer<typeof reglaRedondeoPreciosSchema>;
-
 export const baseActualizacionPrecioSchema = z.enum([
   'costo_base',
   'precio_venta',
@@ -1635,38 +1691,6 @@ export interface ResultadoActualizacionPrecios {
   mensaje: string;
 }
 
-/**
- * Aplica una regla de redondeo comercial a un importe expresado como string decimal.
- * Respeta la regla 3 de AGENTS.md operando en centavos enteros con BigInt.
- */
-export function aplicarRedondeoPrecio(
-  monto: string,
-  regla: ReglaRedondeoPrecios,
-): string {
-  const centavos = aCentavos(monto);
-  if (regla === 'ninguno' || centavos <= 0n) {
-    return monto;
-  }
-
-  let baseCentavos = 100n; // 'entero' = $1.00 = 100 centavos
-  if (regla === 'multiplo_10') {
-    baseCentavos = 1000n; // $10.00
-  } else if (regla === 'multiplo_50') {
-    baseCentavos = 5000n; // $50.00
-  } else if (regla === 'multiplo_100') {
-    baseCentavos = 10000n; // $100.00
-  }
-
-  // Redondeo aritmético: round(centavos / base) * base
-  const resto = centavos % baseCentavos;
-  const mitad = baseCentavos / 2n;
-  const redondeado =
-    resto >= mitad
-      ? centavos + (baseCentavos - resto)
-      : centavos - resto;
-
-  return deCentavos(redondeado > 0n ? redondeado : baseCentavos);
-}
 
 // -------------------------------------------------------------
 // Fase 20 — Logística de Envíos, Despachos y Hoja de Ruta

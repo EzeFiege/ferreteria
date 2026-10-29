@@ -78,12 +78,13 @@ export function registerPreciosReglasRoutes(
             orden: number;
             activo: boolean;
             creado_en: string;
+            redondeo: string;
           }>(
             `
             insert into lista_precio (
-              id, negocio_id, nombre, margen_pct, orden, activo
-            ) values ($1, $2, $3, $4, $5, $6)
-            returning id, nombre, margen_pct as "margenPct", orden, activo,
+              id, negocio_id, nombre, margen_pct, orden, activo, redondeo
+            ) values ($1, $2, $3, $4, $5, $6, $7)
+            returning id, nombre, margen_pct as "margenPct", orden, activo, redondeo,
                       to_char(creado_en, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "creadoEn"
             `,
             [
@@ -93,6 +94,7 @@ export function registerPreciosReglasRoutes(
               body.margenPct,
               body.orden,
               body.activo,
+              body.redondeo,
             ],
           );
 

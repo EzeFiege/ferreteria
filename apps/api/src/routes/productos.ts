@@ -491,6 +491,7 @@ export function registerProductosRoutes(
               margenPct: body.margenPct,
               activo: body.activo ?? true,
               orden: body.orden ?? 1,
+              redondeo: body.redondeo,
             })
             .where(eq(listaPrecio.id, params.id))
             .returning();

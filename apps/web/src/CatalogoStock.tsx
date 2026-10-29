@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState, type ReactElement } from 'react';
-import { normalizarUrlImagen } from '@ferreteria/shared';
+import {
+  aplicarRedondeoPrecio,
+  normalizarUrlImagen,
+  type ReglaRedondeoPrecios,
+} from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
 import { ImportadorMasivoModal } from './ImportadorMasivoModal.js';
@@ -10,6 +14,7 @@ interface ListaPrecioItem {
   nombre: string;
   margenPct: string;
   orden: number;
+  redondeo?: ReglaRedondeoPrecios;
 }
 
 interface ProductoItem {
@@ -1145,13 +1150,17 @@ export function CatalogoStock({
                   {listasPrecios.map((lp) => {
                     const costoNum = Number(formCostoBase) || 0;
                     const precioCalc = costoNum * (1 + Number(lp.margenPct) / 100);
+                    const precioRedondeado = aplicarRedondeoPrecio(
+                      precioCalc.toFixed(2),
+                      lp.redondeo ?? 'ninguno',
+                    );
                     return (
                       <div key={lp.id} className="rounded-lg bg-white p-2 border border-slate-200">
                         <div className="text-slate-500 font-medium">
                           {lp.nombre} (+{lp.margenPct}%)
                         </div>
                         <div className="font-bold text-slate-900 text-sm">
-                          {formatearPesos(precioCalc.toFixed(2))}
+                          {formatearPesos(precioRedondeado)}
                         </div>
                       </div>
                     );
