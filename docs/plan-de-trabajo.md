@@ -804,3 +804,42 @@ Estado:
   - `pnpm lint` con cero advertencias y cero errores.
   - Suite completa de integración: **21 archivos de prueba, 115 tests pasando al 100%** en PostgreSQL real con Testcontainers.
   - Compilación de producción con Vite (`pnpm build`) exitosa.
+
+
+---
+
+## Fase 23 — CRM Comercial 360°: Obras, Pipeline de Presupuestos y Bitácora (Completada ✅)
+
+Objetivo: potenciar la gestión comercial para ferreterías, constructoras y corralones incorporando administración de obras y proyectos por cliente, tablero Kanban de cotizaciones y presupuestos, bitácora de seguimiento de contactos y llamadas, y segmentación inteligente de clientes (Matriz RFM con alertas de abandono y fidelización).
+
+Estado:
+- [x] Migración SQL `db/migrations/023_crm_obras_y_pipeline.sql`:
+  - Tabla `cliente_obra` con clave compuesta `(id, negocio_id)`, datos de ubicación, responsable de obra, fechas de inicio/fin y estado con RLS.
+  - Columnas `obra_id`, `etapa_crm`, `motivo_perdido` y `probabilidad_pct` en tabla `presupuesto`.
+  - Columna `obra_id` en tabla `venta` para imputación directa de despachos a obras.
+  - Tabla inmutable `cliente_contacto_bitacora` para el historial de llamadas, WhatsApps, visitas a obra y compromisos comerciales.
+- [x] Esquemas compartidos en `packages/shared`:
+  - `crearClienteObraSchema`, `actualizarClienteObraSchema`, `crearBitacoraContactoSchema`, `actualizarEtapaPresupuestoCrmSchema`.
+  - Tipos e interfaces: `ClienteObraItem`, `ClienteContactoBitacoraItem`, `PresupuestoKanbanItem`, `SegmentacionClienteItem`.
+  - Auditoría integrada: `'crear_obra'`, `'actualizar_obra'`, `'cambiar_etapa_crm'`, `'crear_bitacora_contacto'`.
+- [x] Backend API (`apps/api/src/routes/crm.ts` y `server.ts`):
+  - `GET /crm/obras`: listado de obras con totales de ventas facturadas y filtros de estado/búsqueda.
+  - `POST /crm/obras`: creación de obras asociadas a clientes con auditoría.
+  - `PATCH /crm/obras/:id`: actualización de datos y estado de obra.
+  - `GET /crm/bitacora`: historial cronológico de contactos con filtros por cliente y obra.
+  - `POST /crm/bitacora`: registro de compromisos y llamadas comerciales.
+  - `GET /crm/pipeline`: tablero Kanban de presupuestos por etapas (`borrador`, `enviado`, `negociacion`, `ganado`, `perdido`).
+  - `PATCH /crm/pipeline/:id/etapa`: transición ágil entre etapas del pipeline con motivo de pérdida y probabilidad de cierre.
+  - `GET /crm/segmentacion`: cálculo dinámico de categorías RFM (`vip`, `frecuente`, `regular`, `riesgo_abandono`, `inactivo`).
+  - Suite de integración completa en `apps/api/src/routes/crm.test.ts` (6 tests pasando al 100%).
+- [x] Frontend Web (`apps/web/src/CrmGestion.tsx` y `App.tsx`):
+  - Tab 1: **Pipeline Kanban interactivo** con columnas por etapa, totales en pesos, cambio rápido de estado y modal de motivos de pérdida.
+  - Tab 2: **Obras & Proyectos** con buscador, avance porcentual de compras respecto al presupuesto estimado y contacto directo con capataces.
+  - Tab 3: **Bitácora de Contacto** con íconos por canal (llamada, WhatsApp, visita a obra), detalles y fechas de próximo compromiso.
+  - Tab 4: **Segmentación Comercial** con métricas RFM, identificación de clientes VIP y botón directo de WhatsApp para reactivación de clientes inactivos.
+  - Acceso directo en barra lateral (`tab-crm`).
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado con cero errores.
+  - `pnpm lint` con cero advertencias y cero errores.
+  - Suite completa de integración pasando al 100% en PostgreSQL real (131 tests pasando).
+  - Compilación de producción con Vite (`pnpm build`) exitosa.

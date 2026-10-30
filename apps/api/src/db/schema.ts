@@ -135,6 +135,7 @@ export const venta = pgTable('venta', {
   turnoId: uuid('turno_id').notNull(),
   clienteId: uuid('cliente_id'),
   autorizadoRetiroId: uuid('autorizado_retiro_id'),
+  obraId: uuid('obra_id'),
   total: numeric('total', { precision: 14, scale: 2 }).notNull(),
   estado: text('estado')
     .$type<'confirmada' | 'anulada'>()
@@ -532,6 +533,7 @@ export const presupuesto = pgTable('presupuesto', {
   fechaVencimiento: date('fecha_vencimiento').notNull(),
   diasValidez: integer('dias_validez').notNull().default(15),
   clienteId: uuid('cliente_id'),
+  obraId: uuid('obra_id'),
   nombreContacto: text('nombre_contacto'),
   telefonoContacto: text('telefono_contacto'),
   emailContacto: text('email_contacto'),
@@ -543,6 +545,12 @@ export const presupuesto = pgTable('presupuesto', {
     .$type<'pendiente' | 'aprobado_convertido' | 'vencido' | 'cancelado'>()
     .notNull()
     .default('pendiente'),
+  etapaCrm: text('etapa_crm')
+    .$type<'borrador' | 'enviado' | 'negociacion' | 'ganado' | 'perdido'>()
+    .notNull()
+    .default('enviado'),
+  motivoPerdido: text('motivo_perdido'),
+  probabilidadPct: integer('probabilidad_pct').notNull().default(50),
   ventaId: uuid('venta_id'),
   observaciones: text('observaciones'),
   creadoPor: text('creado_por'),
@@ -784,4 +792,43 @@ export const itemTransferenciaStock = pgTable('item_transferencia_stock', {
   unidad: text('unidad').notNull(),
   cantidadBase: numeric('cantidad_base', { precision: 14, scale: 3 }).notNull(),
   notas: text('notas'),
+});
+
+// Fase 23: CRM Comercial 360° (Obras por Cliente y Bitácora de Contacto)
+export const clienteObra = pgTable('cliente_obra', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  clienteId: uuid('cliente_id').notNull(),
+  nombre: text('nombre').notNull(),
+  direccion: text('direccion'),
+  localidad: text('localidad'),
+  contactoResponsable: text('contacto_responsable'),
+  telefonoResponsable: text('telefono_responsable'),
+  fechaInicio: date('fecha_inicio'),
+  fechaFinEstimada: date('fecha_fin_estimada'),
+  estado: text('estado')
+    .$type<'planificacion' | 'activa' | 'pausada' | 'finalizada'>()
+    .notNull()
+    .default('activa'),
+  presupuestoEstimado: numeric('presupuesto_estimado', { precision: 14, scale: 2 }).default('0.00'),
+  notas: text('notas'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const clienteContactoBitacora = pgTable('cliente_contacto_bitacora', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  negocioId: uuid('negocio_id').notNull(),
+  clienteId: uuid('cliente_id').notNull(),
+  obraId: uuid('obra_id'),
+  presupuestoId: uuid('presupuesto_id'),
+  tipo: text('tipo')
+    .$type<'llamada' | 'whatsapp' | 'visita_obra' | 'reunion' | 'nota'>()
+    .notNull()
+    .default('llamada'),
+  descripcion: text('descripcion').notNull(),
+  proximoContactoFecha: date('proximo_contacto_fecha'),
+  proximoContactoAccion: text('proximo_contacto_accion'),
+  registradoPor: text('registrado_por'),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });

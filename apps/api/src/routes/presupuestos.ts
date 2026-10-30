@@ -31,6 +31,7 @@ interface PresupuestoRow {
   fecha_vencimiento: string;
   dias_validez: number;
   cliente_id: string | null;
+  obra_id: string | null;
   nombre_contacto: string | null;
   telefono_contacto: string | null;
   email_contacto: string | null;
@@ -39,6 +40,9 @@ interface PresupuestoRow {
   descuento_general: string;
   total: string;
   estado: 'pendiente' | 'aprobado_convertido' | 'vencido' | 'cancelado';
+  etapa_crm: 'borrador' | 'enviado' | 'negociacion' | 'ganado' | 'perdido';
+  motivo_perdido: string | null;
+  probabilidad_pct: number;
   venta_id: string | null;
   observaciones: string | null;
   creado_por: string | null;
@@ -133,6 +137,7 @@ export function registerPresupuestosRoutes(
             fechaVencimiento: p.fecha_vencimiento,
             diasValidez: p.dias_validez,
             clienteId: p.cliente_id,
+            obraId: p.obra_id,
             nombreContacto: p.nombre_contacto,
             telefonoContacto: p.telefono_contacto,
             emailContacto: p.email_contacto,
@@ -141,6 +146,9 @@ export function registerPresupuestosRoutes(
             descuentoGeneral: p.descuento_general,
             total: p.total,
             estado: estaVencido ? 'vencido' : p.estado,
+            etapaCrm: p.etapa_crm,
+            motivoPerdido: p.motivo_perdido,
+            probabilidadPct: p.probabilidad_pct,
             estaVencido,
             ventaId: p.venta_id,
             observaciones: p.observaciones,
@@ -208,6 +216,7 @@ export function registerPresupuestosRoutes(
           fechaVencimiento: p.fecha_vencimiento,
           diasValidez: p.dias_validez,
           clienteId: p.cliente_id,
+          obraId: p.obra_id,
           nombreContacto: p.nombre_contacto,
           telefonoContacto: p.telefono_contacto,
           emailContacto: p.email_contacto,
@@ -216,6 +225,9 @@ export function registerPresupuestosRoutes(
           descuentoGeneral: p.descuento_general,
           total: p.total,
           estado: estaVencido ? 'vencido' : p.estado,
+          etapaCrm: p.etapa_crm,
+          motivoPerdido: p.motivo_perdido,
+          probabilidadPct: p.probabilidad_pct,
           estaVencido,
           ventaId: p.venta_id,
           observaciones: p.observaciones,
@@ -268,10 +280,10 @@ export function registerPresupuestosRoutes(
         const resP = await client.query<PresupuestoRow>(
           `insert into presupuesto (
             id, negocio_id, numero, fecha_emision, fecha_vencimiento, dias_validez,
-            cliente_id, nombre_contacto, telefono_contacto, email_contacto,
+            cliente_id, obra_id, nombre_contacto, telefono_contacto, email_contacto,
             lista_precio_id, subtotal, descuento_general, total, estado,
             observaciones, creado_por
-          ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pendiente', $15, $16)
+          ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'pendiente', $16, $17)
           returning *`,
           [
             presupuestoId,
@@ -281,6 +293,7 @@ export function registerPresupuestosRoutes(
             fechaVencimientoStr,
             diasValidez,
             input.clienteId ?? null,
+            input.obraId ?? null,
             input.nombreContacto ?? null,
             input.telefonoContacto ?? null,
             input.emailContacto ?? null,

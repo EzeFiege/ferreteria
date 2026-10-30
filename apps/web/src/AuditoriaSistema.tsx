@@ -26,6 +26,10 @@ const ACCIONES_LABELS: Record<AccionAuditoria, { label: string; color: string }>
   entrega_acopio: { label: 'Remito Entrega Acopio', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
   crear_deposito: { label: 'Creación de Depósito', color: 'bg-cyan-100 text-cyan-800 border-cyan-300' },
   crear_transferencia_stock: { label: 'Transferencia de Stock', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  crear_obra: { label: 'Creación de Obra', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+  actualizar_obra: { label: 'Actualización de Obra', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+  cambiar_etapa_crm: { label: 'Cambio Etapa CRM', color: 'bg-purple-100 text-purple-800 border-purple-300' },
+  crear_bitacora_contacto: { label: 'Nota en Bitácora CRM', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
 };
 
 function detalleString(val: unknown, fallback = ''): string {

@@ -33,6 +33,7 @@ import { Presupuestos } from './Presupuestos.js';
 import { AcopiosMateriales } from './AcopiosMateriales.js';
 import { LogisticaDespachos } from './LogisticaDespachos.js';
 import { DepositosTransferencias } from './DepositosTransferencias.js';
+import { CrmGestion } from './CrmGestion.js';
 import { AuditoriaSistema } from './AuditoriaSistema.js';
 import { InicioDashboard } from './InicioDashboard.js';
 import {
@@ -351,6 +352,7 @@ export function App(): ReactElement {
     | 'acopios'
     | 'logistica'
     | 'depositos'
+    | 'crm'
   >('inicio');
   const [sidebarAbierto, setSidebarAbierto] = useState<boolean>(false);
 
@@ -1709,6 +1711,23 @@ export function App(): ReactElement {
 
               <button
                 type="button"
+                data-testid="tab-crm"
+                onClick={() => {
+                  setPestana('crm');
+                  setSidebarAbierto(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition ${
+                  pestana === 'crm'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                }`}
+              >
+                <span className="text-base">🏗️</span>
+                <span>CRM & Obras</span>
+              </button>
+
+              <button
+                type="button"
                 data-testid="tab-logistica"
                 onClick={() => {
                   setPestana('logistica');
@@ -2298,6 +2317,16 @@ export function App(): ReactElement {
           <DepositosTransferencias
             token={operadorActivo.token}
             rolUsuario={operadorActivo.rol}
+          />
+        )}
+
+        {pestana === 'crm' && (
+          <CrmGestion
+            token={operadorActivo.token}
+            rolUsuario={operadorActivo.rol}
+            onCargarPresupuestoEnMostrador={() => {
+              setPestana('presupuestos');
+            }}
           />
         )}
 

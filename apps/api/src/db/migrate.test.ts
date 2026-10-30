@@ -66,6 +66,8 @@ describe('API & Migraciones de base de datos', () => {
       '019_logistica_despachos.sql',
       '020_multiples_depositos_transferencias.sql',
       '021_producto_sku.sql',
+      '022_redondeo_listas_precios.sql',
+      '023_crm_obras_y_pipeline.sql',
     ]);
 
     const sql002 = await readFile(
@@ -110,6 +112,8 @@ describe('API & Migraciones de base de datos', () => {
       '019_logistica_despachos.sql',
       '020_multiples_depositos_transferencias.sql',
       '021_producto_sku.sql',
+      '022_redondeo_listas_precios.sql',
+      '023_crm_obras_y_pipeline.sql',
     ]);
 
     // Ejecutar por segunda vez debe ser idempotente (0 nuevas migraciones)

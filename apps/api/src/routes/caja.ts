@@ -387,6 +387,7 @@ export function registerCajaRoutes(
               turnoId: body.turnoId,
               clienteId: body.clienteId ?? null,
               autorizadoRetiroId: body.autorizadoRetiroId ?? null,
+              obraId: body.obraId ?? null,
               total: body.total,
               creadoPor: claims.usuarioId,
             })

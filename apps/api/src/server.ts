@@ -23,6 +23,7 @@ import { registerReabastecimientoRoutes } from './routes/reabastecimiento.js';
 import { registerAcopiosRoutes } from './routes/acopios.js';
 import { registerLogisticaRoutes } from './routes/logistica.js';
 import { registerDepositosRoutes } from './routes/depositos.js';
+import { registerCrmRoutes } from './routes/crm.js';
 
 const { Pool } = pg;
 
@@ -121,6 +122,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     registerAcopiosRoutes(targetApp, { pool, verifyToken: options.verifyToken });
     registerLogisticaRoutes(targetApp, { pool, verifyToken: options.verifyToken });
     registerDepositosRoutes(targetApp, { pool, verifyToken: options.verifyToken });
+    registerCrmRoutes(targetApp, { pool, verifyToken: options.verifyToken });
   };
 
   // 1. Registro directo en la raíz (ej: /auth/login, /contexto-mostrador)

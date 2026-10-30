@@ -132,6 +132,7 @@ export const registrarVentaSchema = z
     turnoId: uuidSchema,
     clienteId: uuidSchema.optional(),
     autorizadoRetiroId: uuidSchema.optional(),
+    obraId: uuidSchema.optional(),
     total: montoPositivoSchema,
     pagos: z.array(pagoVentaInputSchema).min(1),
     items: z.array(itemVentaInputSchema).optional(),
@@ -927,6 +928,7 @@ export const guardarPresupuestoSchema = z.object({
   id: uuidSchema.optional(),
   diasValidez: z.number().int().min(1).max(365).default(15),
   clienteId: uuidSchema.optional().nullable(),
+  obraId: uuidSchema.optional().nullable(),
   nombreContacto: z.string().max(100).optional().nullable(),
   telefonoContacto: z.string().max(50).optional().nullable(),
   emailContacto: z.string().email().optional().nullable(),
@@ -960,6 +962,7 @@ export interface PresupuestoDetalle {
   fechaVencimiento: string;
   diasValidez: number;
   clienteId: string | null;
+  obraId: string | null;
   nombreContacto: string | null;
   telefonoContacto: string | null;
   emailContacto: string | null;
@@ -968,6 +971,9 @@ export interface PresupuestoDetalle {
   descuentoGeneral: string;
   total: string;
   estado: EstadoPresupuesto;
+  etapaCrm: EtapaPresupuestoCrm;
+  motivoPerdido: string | null;
+  probabilidadPct: number;
   estaVencido: boolean;
   ventaId: string | null;
   observaciones: string | null;
@@ -994,6 +1000,10 @@ export const accionAuditoriaSchema = z.enum([
   'entrega_acopio',
   'crear_deposito',
   'crear_transferencia_stock',
+  'crear_obra',
+  'actualizar_obra',
+  'cambiar_etapa_crm',
+  'crear_bitacora_contacto',
 ]);
 export type AccionAuditoria = z.infer<typeof accionAuditoriaSchema>;
 
@@ -1009,6 +1019,9 @@ export const entidadAuditoriaSchema = z.enum([
   'acopio',
   'deposito',
   'transferencia_stock',
+  'cliente_obra',
+  'crm_bitacora',
+  'presupuesto',
 ]);
 export type EntidadAuditoria = z.infer<typeof entidadAuditoriaSchema>;
 
@@ -2130,3 +2143,163 @@ export interface TransferenciaStockCompleta {
   completadoEn: string | null;
   items: ItemTransferenciaStockDetalle[];
 }
+
+// -------------------------------------------------------------
+// Fase 23: CRM Comercial 360° (Obras por Cliente, Pipeline Kanban y Bitácora)
+// -------------------------------------------------------------
+
+export const estadoObraSchema = z.enum([
+  'planificacion',
+  'activa',
+  'pausada',
+  'finalizada',
+]);
+export type EstadoObra = z.infer<typeof estadoObraSchema>;
+
+export const crearClienteObraSchema = z.object({
+  clienteId: z.string().uuid(),
+  nombre: z.string().trim().min(1, 'El nombre de la obra es obligatorio'),
+  direccion: z.string().trim().optional().nullable(),
+  localidad: z.string().trim().optional().nullable(),
+  contactoResponsable: z.string().trim().optional().nullable(),
+  telefonoResponsable: z.string().trim().optional().nullable(),
+  fechaInicio: z.string().optional().nullable(),
+  fechaFinEstimada: z.string().optional().nullable(),
+  estado: estadoObraSchema.default('activa'),
+  presupuestoEstimado: z
+    .string()
+    .regex(/^\d+(\.\d{1,2})?$/, 'Formato de importe inválido')
+    .default('0.00'),
+  notas: z.string().trim().optional().nullable(),
+});
+export type CrearClienteObraInput = z.infer<typeof crearClienteObraSchema>;
+
+export const actualizarClienteObraSchema = crearClienteObraSchema
+  .partial()
+  .omit({ clienteId: true });
+export type ActualizarClienteObraInput = z.infer<typeof actualizarClienteObraSchema>;
+
+export interface ClienteObraItem {
+  id: string;
+  negocioId: string;
+  clienteId: string;
+  clienteNombre: string;
+  nombre: string;
+  direccion: string | null;
+  localidad: string | null;
+  contactoResponsable: string | null;
+  telefonoResponsable: string | null;
+  fechaInicio: string | null;
+  fechaFinEstimada: string | null;
+  estado: EstadoObra;
+  presupuestoEstimado: string;
+  totalVentasAsociadas: string;
+  cantidadVentas: number;
+  notas: string | null;
+  creadoEn: string;
+  actualizadoEn: string;
+}
+
+export const tipoBitacoraContactoSchema = z.enum([
+  'llamada',
+  'whatsapp',
+  'visita_obra',
+  'reunion',
+  'nota',
+]);
+export type TipoBitacoraContacto = z.infer<typeof tipoBitacoraContactoSchema>;
+
+export const crearBitacoraContactoSchema = z.object({
+  clienteId: z.string().uuid(),
+  obraId: z.string().uuid().optional().nullable(),
+  presupuestoId: z.string().uuid().optional().nullable(),
+  tipo: tipoBitacoraContactoSchema.default('llamada'),
+  descripcion: z.string().trim().min(1, 'La descripción es requerida'),
+  proximoContactoFecha: z.string().optional().nullable(),
+  proximoContactoAccion: z.string().trim().optional().nullable(),
+});
+export type CrearBitacoraContactoInput = z.infer<typeof crearBitacoraContactoSchema>;
+
+export interface ClienteContactoBitacoraItem {
+  id: string;
+  negocioId: string;
+  clienteId: string;
+  clienteNombre: string;
+  obraId: string | null;
+  obraNombre: string | null;
+  presupuestoId: string | null;
+  presupuestoNumero: number | null;
+  tipo: TipoBitacoraContacto;
+  descripcion: string;
+  proximoContactoFecha: string | null;
+  proximoContactoAccion: string | null;
+  registradoPor: string | null;
+  creadoEn: string;
+}
+
+export const etapaPresupuestoCrmSchema = z.enum([
+  'borrador',
+  'enviado',
+  'negociacion',
+  'ganado',
+  'perdido',
+]);
+export type EtapaPresupuestoCrm = z.infer<typeof etapaPresupuestoCrmSchema>;
+
+export const actualizarEtapaPresupuestoCrmSchema = z.object({
+  etapaCrm: etapaPresupuestoCrmSchema,
+  motivoPerdido: z.string().trim().optional().nullable(),
+  probabilidadPct: z.number().int().min(0).max(100).optional(),
+});
+export type ActualizarEtapaPresupuestoCrmInput = z.infer<
+  typeof actualizarEtapaPresupuestoCrmSchema
+>;
+
+export interface PresupuestoKanbanItem {
+  id: string;
+  numero: number;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  clienteId: string | null;
+  clienteNombre: string | null;
+  clienteTelefono: string | null;
+  obraId: string | null;
+  obraNombre: string | null;
+  subtotal: string;
+  descuentoGeneral: string;
+  total: string;
+  estado: string;
+  etapaCrm: EtapaPresupuestoCrm;
+  motivoPerdido: string | null;
+  probabilidadPct: number;
+  observaciones: string | null;
+  creadoPor: string | null;
+  creadoEn: string;
+}
+
+export const categoriaRfmClienteSchema = z.enum([
+  'vip',
+  'frecuente',
+  'regular',
+  'riesgo_abandono',
+  'inactivo',
+]);
+export type CategoriaRfmCliente = z.infer<typeof categoriaRfmClienteSchema>;
+
+export interface SegmentacionClienteItem {
+  clienteId: string;
+  codigo: string;
+  nombre: string;
+  cuitDni: string | null;
+  telefono: string | null;
+  email: string | null;
+  categoriaRfm: CategoriaRfmCliente;
+  totalComprasHistorico: string;
+  totalComprasUltimos90Dias: string;
+  cantidadComprasUltimos90Dias: number;
+  diasDesdeUltimaCompra: number | null;
+  ultimaCompraFecha: string | null;
+  saldoCtaCte: string;
+  obrasActivas: number;
+}
+
