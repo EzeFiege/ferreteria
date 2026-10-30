@@ -45,6 +45,11 @@ import type { UsuarioSesion } from '@ferreteria/shared';
 import { imprimirComprobanteFiscal } from './utils/impresion-factura.js';
 import type { ComprobanteFiscalDetalle } from '@ferreteria/shared';
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
 export interface ItemCarrito {
   id: string;
   productoId?: string | undefined;
@@ -253,6 +258,33 @@ function generarUuid(): string {
 }
 
 export function App(): ReactElement {
+  const [promptInstalacion, setPromptInstalacion] = useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setPromptInstalacion(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
+  }, []);
+
+  const handleInstalarApp = async () => {
+    if (!promptInstalacion) {
+      alert(
+        'Para instalar en iPhone/iPad: tocá el botón Compartir y seleccioná "Agregar a pantalla de inicio".\nEn Chrome/Edge: tocá el ícono de instalación en la barra de direcciones o el menú de tres puntos.',
+      );
+      return;
+    }
+    await promptInstalacion.prompt();
+    const choice = await promptInstalacion.userChoice;
+    if (choice.outcome === 'accepted') {
+      setPromptInstalacion(null);
+    }
+  };
+
   const [contexto, setContexto] = useState<ContextoMostrador>(CONTEXTO_FALLBACK);
   const [operadorActivo, setOperadorActivo] = useState<OperadorItem | null>(() => {
     try {
@@ -1930,6 +1962,18 @@ export function App(): ReactElement {
                 </option>
               ))}
             </select>
+
+            {promptInstalacion && (
+              <button
+                type="button"
+                onClick={() => { void handleInstalarApp(); }}
+                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm flex items-center gap-1.5 transition animate-pulse"
+                title="Instalar sistema como App en este dispositivo"
+              >
+                <span>📲</span>
+                <span className="hidden sm:inline">Instalar App</span>
+              </button>
+            )}
 
             <button
               type="button"

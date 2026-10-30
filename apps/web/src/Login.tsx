@@ -1,6 +1,11 @@
-import { useState, type ReactElement, type SyntheticEvent } from 'react';
+import { useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import type { UsuarioSesion, LoginResponse } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 interface LoginProps {
   onLoginExitoso: (token: string, usuario: UsuarioSesion) => void;
@@ -12,6 +17,32 @@ export function Login({ onLoginExitoso }: LoginProps): ReactElement {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorMensaje, setErrorMensaje] = useState<string | null>(null);
+  const [promptInstalacion, setPromptInstalacion] = useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setPromptInstalacion(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
+  }, []);
+
+  const handleInstalarApp = async () => {
+    if (!promptInstalacion) {
+      alert(
+        'Para instalar en iPhone/iPad: tocá el botón Compartir y seleccioná "Agregar a pantalla de inicio".\nEn Chrome: tocá el menú de tres puntos arriba a la derecha y seleccioná "Instalar aplicación".',
+      );
+      return;
+    }
+    await promptInstalacion.prompt();
+    const choice = await promptInstalacion.userChoice;
+    if (choice.outcome === 'accepted') {
+      setPromptInstalacion(null);
+    }
+  };
 
   const handleSubmit = async (e: SyntheticEvent): Promise<void> => {
     e.preventDefault();
@@ -173,6 +204,17 @@ export function Login({ onLoginExitoso }: LoginProps): ReactElement {
             >
               {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
             </button>
+
+            {promptInstalacion && (
+              <button
+                type="button"
+                onClick={() => { void handleInstalarApp(); }}
+                className="mt-3 w-full rounded-xl bg-emerald-50 border border-emerald-300 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition flex items-center justify-center gap-2"
+              >
+                <span>📲</span>
+                <span>Instalar como App en este dispositivo</span>
+              </button>
+            )}
           </form>
 
           {/* Accesos Rápidos para Prueba / Piloto */}
