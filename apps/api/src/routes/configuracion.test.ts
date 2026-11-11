@@ -472,4 +472,50 @@ describe('Etapa 4 — Configuración real del negocio, monitoreo y backup/restor
     expect(resCrossUpdate.statusCode).toBe(404);
   });
 
+  it('expone branding público del logo de la app y refleja logoUrl en contexto-mostrador', async () => {
+    const logoSvg = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const resPut = await app.inject({
+      method: 'PUT',
+      url: '/configuracion/empresa',
+      headers: { authorization: `Bearer ${negocioA.tokenDueno}` },
+      payload: {
+        nombre: 'Ferretería Logo Propio',
+        condicionIva: 'monotributo',
+        logoUrl: logoSvg,
+      },
+    });
+    expect(resPut.statusCode).toBe(200);
+
+    // Branding público consultado por negocioId retorna nombre y logoUrl sin exponer datos fiscales
+    const resBranding = await app.inject({
+      method: 'GET',
+      url: `/configuracion/branding-publico?negocioId=${negocioA.negocioId}`,
+    });
+    expect(resBranding.statusCode).toBe(200);
+    const bodyBranding = resBranding.json<{
+      branding: { nombre: string; logoUrl: string | null };
+    }>();
+    expect(bodyBranding.branding.nombre).toBe('Ferretería Logo Propio');
+    expect(bodyBranding.branding.logoUrl).toBe(logoSvg);
+
+    // Consulta con negocioId inválido retorna 400
+    const resInvalid = await app.inject({
+      method: 'GET',
+      url: '/configuracion/branding-publico?negocioId=no-uuid',
+    });
+    expect(resInvalid.statusCode).toBe(400);
+
+    // El contexto de mostrador incluye negocioLogoUrl (inicialmente null en negocio demo)
+    const resContexto = await app.inject({
+      method: 'GET',
+      url: '/contexto-mostrador',
+    });
+    expect(resContexto.statusCode).toBe(200);
+    const bodyCtx = resContexto.json<{
+      negocioLogoUrl?: string | null;
+      negocioNombre: string;
+    }>();
+    expect('negocioLogoUrl' in bodyCtx).toBe(true);
+  });
+
 });

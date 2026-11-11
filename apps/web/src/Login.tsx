@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactElement, type SyntheticEvent } from 'react';
 import type { UsuarioSesion, LoginResponse } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
+import {
+  aplicarBrandingDocumento,
+  guardarBrandingCache,
+  leerBrandingCache,
+  type BrandingApp,
+} from './branding.js';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -18,6 +24,42 @@ export function Login({ onLoginExitoso }: LoginProps): ReactElement {
   const [cargando, setCargando] = useState(false);
   const [errorMensaje, setErrorMensaje] = useState<string | null>(null);
   const [promptInstalacion, setPromptInstalacion] = useState<BeforeInstallPromptEvent | null>(null);
+  const [branding, setBranding] = useState<BrandingApp | null>(() => leerBrandingCache());
+  const [errorImgLogo, setErrorImgLogo] = useState(false);
+
+  useEffect(() => {
+    const cache = leerBrandingCache();
+    if (cache) {
+      aplicarBrandingDocumento(cache.nombre, cache.logoUrl);
+    }
+
+    const query = cache?.negocioId
+      ? `?negocioId=${encodeURIComponent(cache.negocioId)}`
+      : '';
+
+    void (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/configuracion/branding-publico${query}`));
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          branding?: { nombre: string; logoUrl: string | null };
+        };
+        if (data.branding) {
+          const actualizado: BrandingApp = {
+            nombre: data.branding.nombre,
+            logoUrl: data.branding.logoUrl,
+            ...(cache?.negocioId ? { negocioId: cache.negocioId } : {}),
+          };
+          setBranding(actualizado);
+          setErrorImgLogo(false);
+          guardarBrandingCache(actualizado);
+          aplicarBrandingDocumento(actualizado.nombre, actualizado.logoUrl);
+        }
+      } catch {
+        // Offline o API aún iniciando: mantiene el branding en cache si existe
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -106,11 +148,24 @@ export function Login({ onLoginExitoso }: LoginProps): ReactElement {
       <div className="w-full max-w-md">
         {/* Logo y Encabezado */}
         <div className="text-center mb-8">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 text-3xl shadow-lg shadow-amber-500/20 mb-3">
-            🛠️
-          </div>
+          {branding?.logoUrl && !errorImgLogo ? (
+            <div className="inline-flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-white p-1.5 shadow-lg shadow-amber-500/20 mb-3 border border-slate-700/60">
+              <img
+                src={branding.logoUrl}
+                alt={branding.nombre || 'Logo de la empresa'}
+                className="h-full w-full object-contain"
+                onError={() => {
+                  setErrorImgLogo(true);
+                }}
+              />
+            </div>
+          ) : (
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 text-3xl shadow-lg shadow-amber-500/20 mb-3">
+              🛠️
+            </div>
+          )}
           <h1 className="text-2xl font-black tracking-tight text-white">
-            Sistema de Gestión
+            {branding?.nombre.trim() || 'Sistema de Gestión'}
           </h1>
           <p className="text-sm font-medium text-slate-400 mt-1">
             Ferretería, Corralón & Comercios Similares

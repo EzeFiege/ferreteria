@@ -251,6 +251,7 @@ export function registerCajaRoutes(
             negocioId: DEMO_NEGOCIO_ID,
             negocioNombre: neg?.nombre ?? 'Ferretería El Tornillo',
             negocioCondicionIva: neg?.condicionIva ?? 'monotributo',
+            negocioLogoUrl: neg?.logoUrl ?? null,
             caja: cajaActual,
             cajas: todasLasCajas,
             mediosPago: medios.filter((m) => m.activo),

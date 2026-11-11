@@ -843,3 +843,22 @@ Estado:
   - `pnpm lint` con cero advertencias y cero errores.
   - Suite completa de integración pasando al 100% en PostgreSQL real (131 tests pasando).
   - Compilación de producción con Vite (`pnpm build`) exitosa.
+
+---
+
+## Mejora continua — Logo editable de la App y Branding unificado (Completada ✅)
+
+Objetivo: permitir que cada negocio cargue su propio logo (subiendo archivo PNG/JPG/SVG/WebP desde el dispositivo con optimización automática o pegando una URL) y verlo reflejado de forma inmediata en toda la aplicación, no solo en tickets y facturas.
+
+Estado:
+- [x] Backend API (`apps/api/src/routes/configuracion.ts` y `caja.ts`):
+  - Endpoint público multi-tenant `GET /configuracion/branding-publico` (`?negocioId=...`) para recuperar únicamente `{ nombre, logoUrl }` en la pantalla de login antes de autenticarse.
+  - Campo `negocioLogoUrl` incluido en `GET /contexto-mostrador`.
+  - Test de integración en `apps/api/src/routes/configuracion.test.ts` verificando guardado de `logoUrl`, lectura pública por `negocioId`, validación UUID y presencia en `/contexto-mostrador`.
+- [x] Frontend Web (`apps/web/src/branding.ts`, `App.tsx`, `Login.tsx`, `ConfiguracionPiloto.tsx`):
+  - Utilidad compartida `branding.ts` con procesamiento y compresión Canvas (`procesarArchivoImagenLogo`), cache en `localStorage` (`ferreteria_branding_v1`) y actualización dinámica del título y favicon del navegador (`aplicarBrandingDocumento`).
+  - Reemplazo del ícono fijo en la barra lateral y encabezado móvil de `App.tsx`, más **modal rápido de edición de logo** al hacer clic sobre el logo en la barra lateral (solo rol `dueno`).
+  - Integración del logo y nombre comercial de la empresa en `Login.tsx` y actualización en vivo desde `ConfiguracionPiloto.tsx` (`Datos de Empresa`).
+- [x] Verificación de calidad:
+  - `pnpm typecheck`, `pnpm lint` y `pnpm --filter @ferreteria/web build` superados sin errores ni advertencias.
+  - Suite completa Vitest: **22 archivos de prueba, 128 tests pasando al 100%** en PostgreSQL real.

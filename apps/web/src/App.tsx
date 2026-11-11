@@ -5,6 +5,7 @@ import {
   evaluarDescuentoVolumen,
   formatearMensajeTicket,
   generarLinkWhatsApp,
+  type DatosEmpresaItem,
   type ReglaDescuentoVolumenItem,
   type ReglaRedondeoPrecios,
   type RolUsuario,
@@ -16,6 +17,13 @@ import {
   type OperacionCola,
 } from './offline/cola-indexeddb.js';
 import { apiUrl } from './api-url.js';
+import {
+  aplicarBrandingDocumento,
+  guardarBrandingCache,
+  leerBrandingCache,
+  procesarArchivoImagenLogo,
+  type BrandingApp,
+} from './branding.js';
 import { ConfiguracionPiloto } from './ConfiguracionPiloto.js';
 import { ReportesHistorial } from './ReportesHistorial.js';
 import { CatalogoStock } from './CatalogoStock.js';
@@ -152,6 +160,7 @@ interface ContextoMostrador {
   negocioId: string;
   negocioNombre: string;
   negocioCondicionIva?: string;
+  negocioLogoUrl?: string | null;
   caja: { id: string; nombre: string };
   cajas?: Array<{ id: string; nombre: string }>;
   mediosPago: MedioPagoItem[];
@@ -327,6 +336,40 @@ export function App(): ReactElement {
   const [efectivoInicialInput, setEfectivoInicialInput] =
     useState<string>('0.00');
   const [condicionIvaEmisor, setCondicionIvaEmisor] = useState<string>('monotributo');
+  const [brandingApp, setBrandingApp] = useState<BrandingApp>(() => {
+    const cache = leerBrandingCache();
+    return cache ?? { nombre: 'Ferretería El Tornillo', logoUrl: null };
+  });
+  const [errorLogoSidebar, setErrorLogoSidebar] = useState<boolean>(false);
+  const [modalEditarLogoAbierto, setModalEditarLogoAbierto] = useState<boolean>(false);
+  const [logoDraftUrl, setLogoDraftUrl] = useState<string>('');
+  const [guardandoLogo, setGuardandoLogo] = useState<boolean>(false);
+  const [errorModalLogo, setErrorModalLogo] = useState<string | null>(null);
+
+  const actualizarBrandingApp = useCallback(
+    (nombre: string, logoUrl: string | null, negocioIdRef?: string): void => {
+      const limpioUrl = logoUrl?.trim() ? logoUrl.trim() : null;
+      const nuevo: BrandingApp = {
+        nombre: nombre.trim() || 'Ferretería El Tornillo',
+        logoUrl: limpioUrl,
+        ...(negocioIdRef ? { negocioId: negocioIdRef } : {}),
+      };
+      setBrandingApp(nuevo);
+      setErrorLogoSidebar(false);
+      guardarBrandingCache(nuevo);
+      aplicarBrandingDocumento(nuevo.nombre, nuevo.logoUrl);
+      setContexto((prev) => ({
+        ...prev,
+        negocioNombre: nuevo.nombre,
+        negocioLogoUrl: nuevo.logoUrl,
+      }));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    aplicarBrandingDocumento(brandingApp.nombre, brandingApp.logoUrl);
+  }, [brandingApp]);
 
   const [resumen, setResumen] = useState<ResumenTurnoEstado | null>(null);
   const [ventasPorMedio, setVentasPorMedio] = useState<VentaPorMedioRubro[]>([]);
@@ -447,6 +490,136 @@ export function App(): ReactElement {
       // Mantiene el contexto local si está sin conexión
     }
   }, []);
+
+  useEffect(() => {
+    if (!operadorActivo?.token) {
+      return;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/configuracion/empresa'), {
+          headers: { Authorization: `Bearer ${operadorActivo.token}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { empresa?: DatosEmpresaItem };
+        if (data.empresa && !controller.signal.aborted) {
+          actualizarBrandingApp(
+            data.empresa.nombre,
+            data.empresa.logoUrl ?? null,
+            data.empresa.id,
+          );
+          if (data.empresa.condicionIva) {
+            setCondicionIvaEmisor(data.empresa.condicionIva);
+          }
+        }
+      } catch {
+        // Offline o cancelado: conserva branding en cache local
+      }
+    })();
+    return () => {
+      controller.abort();
+    };
+  }, [actualizarBrandingApp, operadorActivo?.token]);
+
+  const abrirModalEditarLogo = useCallback((): void => {
+    const actual = brandingApp.logoUrl ?? contexto.negocioLogoUrl ?? '';
+    setLogoDraftUrl(actual);
+    setErrorModalLogo(null);
+    setModalEditarLogoAbierto(true);
+  }, [brandingApp.logoUrl, contexto.negocioLogoUrl]);
+
+  const handleArchivoLogoModal = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>): void => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setErrorModalLogo(null);
+      void procesarArchivoImagenLogo(file)
+        .then((optimizedDataUrl) => {
+          setLogoDraftUrl(optimizedDataUrl);
+        })
+        .catch((err: unknown) => {
+          setErrorModalLogo(
+            err instanceof Error
+              ? err.message
+              : 'No se pudo procesar la imagen seleccionada.',
+          );
+        });
+    },
+    [],
+  );
+
+  const handleGuardarLogoModal = useCallback(
+    async (urlAGuardar?: string): Promise<void> => {
+      if (!operadorActivo?.token) return;
+      setGuardandoLogo(true);
+      setErrorModalLogo(null);
+      const valorFinal = (urlAGuardar !== undefined ? urlAGuardar : logoDraftUrl).trim() || null;
+
+      try {
+        const resGet = await fetch(apiUrl('/api/configuracion/empresa'), {
+          headers: { Authorization: `Bearer ${operadorActivo.token}` },
+        });
+        if (!resGet.ok) {
+          const err = (await resGet.json().catch(() => ({}))) as { error?: string };
+          setErrorModalLogo(err.error ?? 'No se pudo leer la configuración actual de la empresa.');
+          return;
+        }
+        const dataGet = (await resGet.json()) as { empresa?: DatosEmpresaItem };
+        const emp = dataGet.empresa;
+        if (!emp) {
+          setErrorModalLogo('No se encontraron los datos de la empresa.');
+          return;
+        }
+
+        const resPut = await fetch(apiUrl('/api/configuracion/empresa'), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${operadorActivo.token}`,
+          },
+          body: JSON.stringify({
+            nombre: emp.nombre,
+            razonSocial: emp.razonSocial ?? null,
+            cuit: emp.cuit ?? null,
+            condicionIva: emp.condicionIva,
+            iibb: emp.iibb ?? null,
+            inicioActividades: emp.inicioActividades ?? null,
+            domicilioComercial: emp.domicilioComercial ?? null,
+            telefono: emp.telefono ?? null,
+            email: emp.email ?? null,
+            logoUrl: valorFinal,
+            leyendaTicket: emp.leyendaTicket ?? null,
+          }),
+        });
+
+        if (!resPut.ok) {
+          const err = (await resPut.json().catch(() => ({}))) as { error?: string };
+          setErrorModalLogo(err.error ?? 'No se pudo guardar el logo.');
+          return;
+        }
+
+        const dataPut = (await resPut.json()) as { empresa: DatosEmpresaItem };
+        actualizarBrandingApp(
+          dataPut.empresa.nombre,
+          dataPut.empresa.logoUrl ?? null,
+          dataPut.empresa.id,
+        );
+        setModalEditarLogoAbierto(false);
+        setAviso(
+          valorFinal
+            ? 'Logo de la aplicación actualizado correctamente.'
+            : 'Logo personalizado quitado; se restauró el ícono por defecto.',
+        );
+      } catch {
+        setErrorModalLogo('Error de red al intentar guardar el logo.');
+      } finally {
+        setGuardandoLogo(false);
+      }
+    },
+    [actualizarBrandingApp, logoDraftUrl, operadorActivo?.token],
+  );
 
   const cargarResumenTurno = useCallback(
     async (idTurno: string, token: string) => {
@@ -1510,13 +1683,56 @@ export function App(): ReactElement {
       >
         {/* Identidad del Negocio */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 px-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-amber-600 text-xl font-black text-slate-950 shadow-md">
-              🛠️
-            </div>
+          <div className="flex items-center gap-3 min-w-0">
+            {(() => {
+              const logoActivo = brandingApp.logoUrl ?? contexto.negocioLogoUrl ?? null;
+              const nombreActivo = brandingApp.nombre || contexto.negocioNombre;
+              const puedeEditarLogo = operadorActivo.rol === 'dueno';
+              const contenidoLogo =
+                logoActivo && !errorLogoSidebar ? (
+                  <img
+                    src={logoActivo}
+                    alt={nombreActivo}
+                    className="h-full w-full object-contain"
+                    onError={() => {
+                      setErrorLogoSidebar(true);
+                    }}
+                  />
+                ) : (
+                  <span>🛠️</span>
+                );
+              return puedeEditarLogo ? (
+                <button
+                  type="button"
+                  onClick={abrirModalEditarLogo}
+                  title="Editar logo de la app"
+                  aria-label="Editar logo de la app"
+                  className={`group relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-md transition hover:ring-2 hover:ring-amber-400 ${
+                    logoActivo && !errorLogoSidebar
+                      ? 'bg-white p-0.5'
+                      : 'bg-gradient-to-tr from-amber-500 to-amber-600 text-xl font-black text-slate-950'
+                  }`}
+                >
+                  {contenidoLogo}
+                  <span className="absolute inset-0 flex items-center justify-center bg-slate-950/65 text-[11px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+                    ✏️
+                  </span>
+                </button>
+              ) : (
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-md ${
+                    logoActivo && !errorLogoSidebar
+                      ? 'bg-white p-0.5'
+                      : 'bg-gradient-to-tr from-amber-500 to-amber-600 text-xl font-black text-slate-950'
+                  }`}
+                >
+                  {contenidoLogo}
+                </div>
+              );
+            })()}
             <div className="truncate">
               <div className="truncate text-sm font-black text-white leading-tight">
-                {contexto.negocioNombre}
+                {brandingApp.nombre || contexto.negocioNombre}
               </div>
               <div className="truncate text-[11px] font-semibold text-emerald-400">
                 {contexto.caja.nombre}
@@ -1927,8 +2143,15 @@ export function App(): ReactElement {
             </button>
 
             <div>
-              <div className="text-xs text-slate-400 font-medium">
-                {contexto.negocioNombre} · {contexto.caja.nombre}
+              <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
+                {(brandingApp.logoUrl ?? contexto.negocioLogoUrl) && !errorLogoSidebar && (
+                  <img
+                    src={(brandingApp.logoUrl ?? contexto.negocioLogoUrl) ?? ''}
+                    alt={brandingApp.nombre || contexto.negocioNombre}
+                    className="h-4 w-4 rounded bg-white object-contain p-0.5 lg:hidden"
+                  />
+                )}
+                <span>{brandingApp.nombre || contexto.negocioNombre} · {contexto.caja.nombre}</span>
               </div>
               <div className="text-sm font-bold flex items-center gap-2">
                 {turnoId ? (
@@ -2399,8 +2622,11 @@ export function App(): ReactElement {
               }
             }}
             onCatalogosActualizados={recargarContextoMostrador}
-            onEmpresaActualizada={(nuevaCond) => {
+            onEmpresaActualizada={(nuevaCond, branding) => {
               setCondicionIvaEmisor(nuevaCond);
+              if (branding) {
+                actualizarBrandingApp(branding.nombre, branding.logoUrl);
+              }
             }}
           />
         )}
@@ -3516,6 +3742,129 @@ export function App(): ReactElement {
             <span>Menú</span>
           </button>
         </nav>
+
+        {/* MODAL RÁPIDO PARA EDITAR LOGO DE LA APP */}
+        {modalEditarLogoAbierto && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">
+                    Logo de la App y Empresa
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Subí el logo de tu ferretería para mostrarlo en la app, el login, la pestaña del navegador y tus comprobantes.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setModalEditarLogoAbierto(false); }}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Cerrar modal"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {errorModalLogo && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {errorModalLogo}
+                </div>
+              )}
+
+              <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-4">
+                {logoDraftUrl.trim() ? (
+                  <img
+                    src={logoDraftUrl}
+                    alt="Vista previa del logo"
+                    className="max-h-28 max-w-[220px] rounded-lg bg-white p-1.5 object-contain shadow-sm border border-slate-200"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 text-4xl shadow-md">
+                    🛠️
+                  </div>
+                )}
+                <span className="mt-2 text-[11px] font-medium text-slate-500">
+                  {logoDraftUrl.trim() ? 'Vista previa actual' : 'Usando ícono por defecto'}
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Subir imagen desde tu dispositivo (PNG, JPG, SVG, WebP)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleArchivoLogoModal}
+                    className="w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white hover:file:bg-slate-800 cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    O pegar enlace (URL) de imagen
+                  </label>
+                  <input
+                    type="url"
+                    value={logoDraftUrl.startsWith('data:') ? '' : logoDraftUrl}
+                    onChange={(e) => { setLogoDraftUrl(e.target.value); }}
+                    placeholder="https://ejemplo.com/mi-logo.png"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:border-slate-900 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  {logoDraftUrl.trim() && (
+                    <button
+                      type="button"
+                      disabled={guardandoLogo}
+                      onClick={() => {
+                        setLogoDraftUrl('');
+                        void handleGuardarLogoModal('');
+                      }}
+                      className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                    >
+                      Quitar Logo
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalEditarLogoAbierto(false);
+                      setPestana('configuracion');
+                    }}
+                    className="rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                  >
+                    Config. completa
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={guardandoLogo}
+                    onClick={() => { setModalEditarLogoAbierto(false); }}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={guardandoLogo}
+                    onClick={() => { void handleGuardarLogoModal(); }}
+                    className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-slate-950 shadow-sm hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    {guardandoLogo ? 'Guardando...' : 'Guardar Logo'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

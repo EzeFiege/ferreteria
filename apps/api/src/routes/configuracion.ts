@@ -401,6 +401,43 @@ export function registerConfiguracionRoutes(
   // Fase 15: Configuración de Empresa (Branding, Datos Fiscales y Tickets)
   // --------------------------------------------------------------------------
 
+  app.get('/configuracion/branding-publico', async (request, reply) => {
+    try {
+      const query = request.query as { negocioId?: string };
+      const negocioIdRaw = query.negocioId?.trim();
+      const negocioId = negocioIdRaw
+        ? uuidSchema.parse(negocioIdRaw)
+        : '10000000-0000-4000-8000-000000000001';
+
+      const branding = await withTenantTransaction(
+        pool,
+        negocioId,
+        async ({ client }) => {
+          const res = await client.query<{
+            nombre: string;
+            logo_url: string | null;
+          }>(
+            `
+            select nombre, logo_url
+            from negocio
+            where id = $1
+            `,
+            [negocioId],
+          );
+          const fila = res.rows[0];
+          return {
+            nombre: fila?.nombre ?? 'Ferretería El Tornillo',
+            logoUrl: fila?.logo_url ?? null,
+          };
+        },
+      );
+
+      return await reply.code(200).send({ branding });
+    } catch (err: unknown) {
+      return handleConfigError(err, request, reply);
+    }
+  });
+
   app.get('/configuracion/empresa', async (request, reply) => {
     try {
       const claims = await authenticateRequest(request, verifyToken);

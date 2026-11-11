@@ -11,6 +11,7 @@ import {
 } from '@ferreteria/shared';
 import { apiUrl } from './api-url.js';
 import { formatearPesos } from './App.js';
+import { procesarArchivoImagenLogo } from './branding.js';
 import { GestionListasYReglas } from './GestionListasYReglas.js';
 import {
   imprimirComprobanteFiscal,
@@ -53,7 +54,10 @@ export interface ConfiguracionPilotoProps {
   efectivoEsperadoActual: string;
   onSolicitarRolDueno: () => void;
   onCatalogosActualizados: () => Promise<void>;
-  onEmpresaActualizada?: (condicionIva: string) => void;
+  onEmpresaActualizada?: (
+    condicionIva: string,
+    branding?: { nombre: string; logoUrl: string | null },
+  ) => void;
 }
 
 const STORAGE_KEY_PILOTO = 'ferreteria_bitacora_piloto_v1';
@@ -519,10 +523,13 @@ export function ConfiguracionPiloto({
         return;
       }
 
-      setMensaje('Datos comerciales y de branding guardados exitosamente.');
+      setMensaje('Datos comerciales y logo de la app guardados exitosamente.');
       await cargarEmpresa();
       if (onEmpresaActualizada) {
-        onEmpresaActualizada(condicionIva);
+        onEmpresaActualizada(condicionIva, {
+          nombre: nombreComercial.trim(),
+          logoUrl: logoUrl.trim() || null,
+        });
       }
     } catch {
       setErrorMsg('Error de red al guardar los datos de la empresa.');
@@ -533,65 +540,19 @@ export function ConfiguracionPiloto({
   const procesarLogoLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setErrorMsg(null);
 
-    if (!file.type.startsWith('image/')) {
-      setErrorMsg('El archivo seleccionado debe ser una imagen (PNG, JPG, SVG, WebP).');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg('La imagen no debe superar los 10 MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (!result) return;
-
-      // Si es SVG, guardarlo directamente como vector
-      if (file.type.includes('svg')) {
-        setLogoUrl(result);
-        return;
-      }
-
-      // Para imágenes bitmap (PNG, JPEG, WebP), optimizar y redimensionar vía Canvas
-      const img = new Image();
-      img.onload = () => {
-        const MAX_DIM = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > MAX_DIM || height > MAX_DIM) {
-          if (width > height) {
-            height = Math.round((height * MAX_DIM) / width);
-            width = MAX_DIM;
-          } else {
-            width = Math.round((width * MAX_DIM) / height);
-            height = MAX_DIM;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          setLogoUrl(result);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-        // Usar image/png para preservar transparencia
-        const optimizedBase64 = canvas.toDataURL('image/png');
-        setLogoUrl(optimizedBase64);
-      };
-      img.onerror = () => {
-        setLogoUrl(result);
-      };
-      img.src = result;
-    };
-    reader.readAsDataURL(file);
+    void procesarArchivoImagenLogo(file)
+      .then((optimizedDataUrl) => {
+        setLogoUrl(optimizedDataUrl);
+      })
+      .catch((err: unknown) => {
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : 'No se pudo procesar la imagen seleccionada.',
+        );
+      });
   };
 
   // Guardar Usuario (Crear o Editar)
@@ -1190,9 +1151,14 @@ export function ConfiguracionPiloto({
 
               {/* Logo */}
               <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-3">
-                <label className="block text-xs font-bold text-slate-900">
-                  Logo de la Empresa (Para Tickets y Facturas)
-                </label>
+                <div>
+                  <label className="block text-xs font-bold text-slate-900">
+                    Logo de la App, Tickets y Facturas
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Este logo se mostrará en el menú lateral de la app, la pantalla de inicio de sesión, el ícono del navegador y tus comprobantes impresos.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">
