@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   aplicarRedondeoPrecio,
   normalizarUrlImagen,
@@ -93,6 +93,8 @@ export function CatalogoStock({
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState<boolean>(false);
   const [modalEtiquetaAbierto, setModalEtiquetaAbierto] = useState<boolean>(false);
   const [modalImportarAbierto, setModalImportarAbierto] = useState<boolean>(false);
+  const [modalSelectorDuplicarAbierto, setModalSelectorDuplicarAbierto] = useState<boolean>(false);
+  const [busquedaDuplicar, setBusquedaDuplicar] = useState<string>('');
   const [mostrarActualizadorPrecios, setMostrarActualizadorPrecios] = useState<boolean>(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState<ProductoItem | null>(null);
   const [esDuplicacion, setEsDuplicacion] = useState<boolean>(false);
@@ -250,6 +252,22 @@ export function CatalogoStock({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  const productosFiltradosParaDuplicar = useMemo(() => {
+    if (!busquedaDuplicar.trim()) {
+      return productos.slice(0, 50);
+    }
+    const q = busquedaDuplicar.toLowerCase().trim();
+    return productos
+      .filter(
+        (p) =>
+          p.nombre.toLowerCase().includes(q) ||
+          p.codigo.toLowerCase().includes(q) ||
+          (p.sku && p.sku.toLowerCase().includes(q)) ||
+          p.rubro_nombre.toLowerCase().includes(q),
+      )
+      .slice(0, 50);
+  }, [busquedaDuplicar, productos]);
 
   const limpiarFormularioAlta = useCallback(() => {
     setFormId(null);
@@ -742,6 +760,19 @@ export function CatalogoStock({
             </button>
             <button
               type="button"
+              data-testid="btn-duplicar-articulo-top"
+              onClick={() => {
+                setBusquedaDuplicar('');
+                setModalSelectorDuplicarAbierto(true);
+              }}
+              className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-800 shadow-sm hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-colors"
+              title="Copiar datos de un artículo existente para crear uno nuevo"
+            >
+              <span>📋</span>
+              <span>Duplicar Artículo</span>
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 abrirModalAltaConDatos({
                   codigo: '',
@@ -950,12 +981,14 @@ export function CatalogoStock({
                               <button
                                 type="button"
                                 title="Duplicar / Copiar Artículo"
+                                aria-label="Duplicar / Copiar Artículo"
                                 onClick={() => {
                                   abrirModalDuplicar(prod);
                                 }}
-                                className="rounded-lg bg-emerald-50 p-1.5 text-emerald-700 hover:bg-emerald-100"
+                                className="rounded-lg bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1 transition"
                               >
-                                📋
+                                <span>📋</span>
+                                <span className="hidden xl:inline">Duplicar</span>
                               </button>
                             </>
                           )}
@@ -1000,7 +1033,41 @@ export function CatalogoStock({
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {formId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormId(null);
+                      setEsDuplicacion(true);
+                      setFormCodigo(`${formCodigo}-COPIA`);
+                      setFormSku(formSku ? `${formSku}-COPIA` : '');
+                      setFormNombre(`${formNombre} (Copia)`);
+                      setFormCodigosBarra('');
+                      setAviso(
+                        'Modo duplicación activado: modificá los datos necesarios y guardá como un nuevo artículo.',
+                      );
+                    }}
+                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition flex items-center gap-1"
+                    title="Crear una copia de este artículo con un nuevo código"
+                  >
+                    <span>📋</span>
+                    <span>Duplicar este artículo</span>
+                  </button>
+                ) : !esDuplicacion ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBusquedaDuplicar('');
+                      setModalSelectorDuplicarAbierto(true);
+                    }}
+                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition flex items-center gap-1"
+                    title="Copiar datos de un artículo existente del catálogo"
+                  >
+                    <span>📋</span>
+                    <span>Copiar de existente...</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={limpiarFormularioAlta}
@@ -1425,27 +1492,69 @@ export function CatalogoStock({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalAltaAbierto(false);
-                    limpiarFormularioAlta();
-                  }}
-                  className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-blue-500"
-                >
-                  {esDuplicacion
-                    ? 'Crear Artículo Duplicado'
-                    : formId
-                      ? 'Guardar Cambios'
-                      : 'Guardar Artículo'}
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                <div>
+                  {formId ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormId(null);
+                        setEsDuplicacion(true);
+                        setFormCodigo(`${formCodigo}-COPIA`);
+                        setFormSku(formSku ? `${formSku}-COPIA` : '');
+                        setFormNombre(`${formNombre} (Copia)`);
+                        setFormCodigosBarra('');
+                        setAviso(
+                          'Modo duplicación activado: modificá los datos necesarios y guardá como un nuevo artículo.',
+                        );
+                      }}
+                      className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 transition"
+                      title="Crear un nuevo artículo copiando los datos de este"
+                    >
+                      <span>📋</span>
+                      <span>Duplicar este artículo</span>
+                    </button>
+                  ) : esDuplicacion ? (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+                      <span>📋 Modo duplicación activo</span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBusquedaDuplicar('');
+                        setModalSelectorDuplicarAbierto(true);
+                      }}
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 transition"
+                    >
+                      <span>📋</span>
+                      <span>Copiar datos de otro artículo...</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalAltaAbierto(false);
+                      limpiarFormularioAlta();
+                    }}
+                    className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-blue-500"
+                  >
+                    {esDuplicacion
+                      ? 'Crear Artículo Duplicado'
+                      : formId
+                        ? 'Guardar Cambios'
+                        : 'Guardar Artículo'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1657,6 +1766,99 @@ export function CatalogoStock({
             void cargarProductos();
           }}
         />
+      )}
+
+      {/* MODAL: Selector rápido de artículo para duplicar */}
+      {modalSelectorDuplicarAbierto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Seleccionar Artículo para Duplicar
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Elegí el artículo base. Se copiarán todos sus atributos para que des de alta uno nuevo en segundos.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalSelectorDuplicarAbierto(false);
+                  setBusquedaDuplicar('');
+                }}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="my-3">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Buscar por nombre, código o SKU..."
+                value={busquedaDuplicar}
+                onChange={(e) => {
+                  setBusquedaDuplicar(e.target.value);
+                }}
+                className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 max-h-[50vh] pr-1">
+              {productosFiltradosParaDuplicar.length === 0 ? (
+                <div className="text-center py-8 text-sm text-slate-400">
+                  No se encontraron artículos que coincidan con la búsqueda.
+                </div>
+              ) : (
+                productosFiltradosParaDuplicar.map((prod) => (
+                  <div
+                    key={prod.id}
+                    onClick={() => {
+                      setModalSelectorDuplicarAbierto(false);
+                      setBusquedaDuplicar('');
+                      abrirModalDuplicar(prod);
+                    }}
+                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 cursor-pointer transition group"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <div className="font-bold text-sm text-slate-900 truncate group-hover:text-emerald-900">
+                        {prod.nombre}
+                      </div>
+                      <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                        <span>Cód: {prod.codigo}</span>
+                        {prod.sku && <span>· SKU: {prod.sku}</span>}
+                        <span>· {prod.rubro_nombre}</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-bold text-slate-700">
+                        {formatearPesos(prod.costo_base)}
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-md mt-1 inline-block">
+                        Copiar 📋
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalSelectorDuplicarAbierto(false);
+                  setBusquedaDuplicar('');
+                }}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
