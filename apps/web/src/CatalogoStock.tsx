@@ -95,6 +95,7 @@ export function CatalogoStock({
   const [modalImportarAbierto, setModalImportarAbierto] = useState<boolean>(false);
   const [mostrarActualizadorPrecios, setMostrarActualizadorPrecios] = useState<boolean>(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState<ProductoItem | null>(null);
+  const [esDuplicacion, setEsDuplicacion] = useState<boolean>(false);
 
   // Formulario de Alta / Edición
   const [formId, setFormId] = useState<string | null>(null);
@@ -267,6 +268,7 @@ export function CatalogoStock({
     setFormImagenUrl('');
     setOrigenAutocompletado(null);
     setCandidatosWeb([]);
+    setEsDuplicacion(false);
   }, [rubros]);
 
   const procesarDisparoPistola = async (codigoEan: string): Promise<void> => {
@@ -445,11 +447,13 @@ export function CatalogoStock({
     setFormImagenUrl(datos.imagenUrl);
     setOrigenAutocompletado(datos.origen);
     setCandidatosWeb(datos.candidatos ?? []);
+    setEsDuplicacion(false);
     setModalAltaAbierto(true);
   };
 
   const abrirModalEdicion = (prod: ProductoItem): void => {
     setFormId(prod.id);
+    setEsDuplicacion(false);
     setFormCodigo(prod.codigo);
     setFormSku(prod.sku ?? '');
     setFormNombre(prod.nombre);
@@ -466,6 +470,28 @@ export function CatalogoStock({
     setOrigenAutocompletado(null);
     setCandidatosWeb([]);
     setModalAltaAbierto(true);
+  };
+
+  const abrirModalDuplicar = (prod: ProductoItem): void => {
+    setFormId(null);
+    setEsDuplicacion(true);
+    setFormCodigo(`${prod.codigo}-COPIA`);
+    setFormSku(prod.sku ? `${prod.sku}-COPIA` : '');
+    setFormNombre(`${prod.nombre} (Copia)`);
+    setFormMarca(prod.marca ?? '');
+    setFormRubroId(prod.rubro_id ?? (rubros[0]?.id ?? ''));
+    setFormCostoBase(prod.costo_base);
+    setFormUnidadPrincipal(prod.unidad_principal);
+    setFormUnidadSecundaria(prod.unidad_secundaria ?? '');
+    setFormFactorConversion(prod.factor_conversion);
+    setFormPermiteFraccion(prod.permite_fraccion);
+    setFormStockMinimo(prod.stock_minimo);
+    setFormCodigosBarra('');
+    setFormImagenUrl(prod.imagen_url ?? '');
+    setOrigenAutocompletado(null);
+    setCandidatosWeb([]);
+    setModalAltaAbierto(true);
+    setAviso(`Duplicando "${prod.nombre}". Asigná el nuevo código o código de barras y guardá.`);
   };
 
   const guardarProducto = async (e: React.SyntheticEvent): Promise<void> => {
@@ -921,6 +947,16 @@ export function CatalogoStock({
                               >
                                 ✏️
                               </button>
+                              <button
+                                type="button"
+                                title="Duplicar / Copiar Artículo"
+                                onClick={() => {
+                                  abrirModalDuplicar(prod);
+                                }}
+                                className="rounded-lg bg-emerald-50 p-1.5 text-emerald-700 hover:bg-emerald-100"
+                              >
+                                📋
+                              </button>
                             </>
                           )}
                         </div>
@@ -941,8 +977,17 @@ export function CatalogoStock({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
-                  {formId ? 'Editar Artículo' : 'Nuevo Artículo en Catálogo'}
+                  {formId
+                    ? 'Editar Artículo'
+                    : esDuplicacion
+                      ? 'Duplicar Artículo (Nuevo a partir de copia)'
+                      : 'Nuevo Artículo en Catálogo'}
                 </h3>
+                {esDuplicacion && (
+                  <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 w-fit">
+                    <span>📋 Copiando datos del artículo base. Asigná el nuevo código o código de barras.</span>
+                  </div>
+                )}
                 {origenAutocompletado && (
                   <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 w-fit">
                     <span>⚡ Datos autocompletados desde {origenAutocompletado}</span>
@@ -1395,7 +1440,11 @@ export function CatalogoStock({
                   type="submit"
                   className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-blue-500"
                 >
-                  Guardar Artículo
+                  {esDuplicacion
+                    ? 'Crear Artículo Duplicado'
+                    : formId
+                      ? 'Guardar Cambios'
+                      : 'Guardar Artículo'}
                 </button>
               </div>
             </form>

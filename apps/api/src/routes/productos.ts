@@ -109,11 +109,12 @@ export function registerProductosRoutes(
 
           // Obtener precios por lista para este producto
           const preciosRes = await client.query<{
+            lista_precio_id: string;
             lista_nombre: string;
             precio_venta_principal: string;
             precio_venta_secundaria: string | null;
           }>(
-            `select lista_nombre, precio_venta_principal, precio_venta_secundaria
+            `select lista_precio_id, lista_nombre, precio_venta_principal, precio_venta_secundaria
              from v_precios_producto
              where producto_id = $1`,
             [prod.producto_id],
@@ -122,6 +123,7 @@ export function registerProductosRoutes(
           const preciosMap: Record<string, string> = {};
           for (const row of preciosRes.rows) {
             preciosMap[row.lista_nombre] = row.precio_venta_principal;
+            preciosMap[row.lista_precio_id] = row.precio_venta_principal;
           }
 
           return {
@@ -231,11 +233,12 @@ export function registerProductosRoutes(
           // Cargar precios de las listas para todos los productos resultantes
           const preciosRes = await client.query<{
             producto_id: string;
+            lista_precio_id: string;
             lista_nombre: string;
             precio_venta_principal: string;
             precio_venta_secundaria: string | null;
           }>(
-            `select producto_id, lista_nombre, precio_venta_principal, precio_venta_secundaria
+            `select producto_id, lista_precio_id, lista_nombre, precio_venta_principal, precio_venta_secundaria
              from v_precios_producto`,
           );
 
@@ -243,6 +246,7 @@ export function registerProductosRoutes(
           for (const row of preciosRes.rows) {
             const map = preciosPorProducto.get(row.producto_id) ?? {};
             map[row.lista_nombre] = row.precio_venta_principal;
+            map[row.lista_precio_id] = row.precio_venta_principal;
             preciosPorProducto.set(row.producto_id, map);
           }
 

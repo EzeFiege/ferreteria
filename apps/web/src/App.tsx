@@ -132,6 +132,50 @@ export function agregarDigitoTeclado(actual: string, digito: string): string {
   return candidato;
 }
 
+export function obtenerPrecioUnitarioSegunLista(
+  precios: Record<string, string> | undefined,
+  listaId: string,
+  listasDisponibles: ListaPrecioItem[],
+  costoBase: string,
+): string {
+  if (precios) {
+    // 1. Coincidencia directa por ID de lista (UUID)
+    const precioPorId = precios[listaId];
+    if (precioPorId) {
+      return precioPorId;
+    }
+
+    // 2. Coincidencia por nombre de la lista (ej: "Mostrador", "Gremio", "Mayorista")
+    const listaTarget = listasDisponibles.find((l) => l.id === listaId);
+    if (listaTarget) {
+      const precioPorNombre = precios[listaTarget.nombre];
+      if (precioPorNombre) {
+        return precioPorNombre;
+      }
+    }
+
+    // 3. Fallback a la lista 'Mostrador' si está definida en precios
+    const precioMostrador = precios['Mostrador'];
+    if (precioMostrador) {
+      return precioMostrador;
+    }
+  }
+
+  // 4. Si hay lista seleccionada y costo base válido, calcular según margen porcentual
+  const listaTarget =
+    listasDisponibles.find((l) => l.id === listaId) ?? listasDisponibles[0];
+  if (listaTarget && costoBase && parseFloat(costoBase) > 0) {
+    const costoCent = aCentavos(costoBase);
+    const margen = parseFloat(listaTarget.margenPct) || 0;
+    const ventaCent =
+      (costoCent * BigInt(Math.round((100 + margen) * 100))) / 10000n;
+    return deCentavos(ventaCent);
+  }
+
+  // 5. Último recurso (artículo sin margen configurado)
+  return costoBase || '0.00';
+}
+
 interface MedioPagoItem {
   id: string;
   nombre: string;
@@ -817,10 +861,14 @@ export function App(): ReactElement {
       setItemsCarrito((prev) =>
         prev.map((it) => {
           let nuevoPrecioUnit = it.precioUnitario;
-          if (it.preciosPorLista && it.preciosPorLista[nuevaListaId]) {
+          if (it.preciosPorLista || it.costoBase) {
             const factor = parseFloat(it.factorConversion) || 1;
-            const precioPrincipal =
-              it.preciosPorLista[nuevaListaId] ?? it.precioUnitario;
+            const precioPrincipal = obtenerPrecioUnitarioSegunLista(
+              it.preciosPorLista,
+              nuevaListaId,
+              listasPrecios,
+              it.costoBase ?? it.precioUnitario,
+            );
             if (it.unidad === 'secundaria' && factor > 0) {
               const precioPrincCent = aCentavos(precioPrincipal);
               const precioSecCent =
@@ -860,7 +908,7 @@ export function App(): ReactElement {
         }),
       );
     },
-    [reglasVolumen],
+    [listasPrecios, reglasVolumen],
   );
 
   const cargarListasPrecios = useCallback(async (token: string) => {
@@ -1058,8 +1106,12 @@ export function App(): ReactElement {
         }
 
         const prod = productoEncontrado;
-        const precioUnit =
-          prod.precios[listaPrecioIdSeleccionada] ?? prod.costoBase;
+        const precioUnit = obtenerPrecioUnitarioSegunLista(
+          prod.precios,
+          listaPrecioIdSeleccionada,
+          listasPrecios,
+          prod.costoBase,
+        );
 
         setItemsCarrito((prev) => {
           const idx = prev.findIndex(
@@ -1069,21 +1121,49 @@ export function App(): ReactElement {
             const item = prev[idx];
             const cantNum = (parseFloat(item.cantidad) || 0) + 1;
             const cantStr = cantNum.toFixed(3);
+            const promo = evaluarDescuentoVolumen({
+              productoId: item.productoId,
+              rubroId: item.rubroId,
+              listaPrecioId: listaPrecioIdSeleccionada,
+              cantidad: cantNum,
+              reglas: reglasVolumen,
+            });
+            const descPct = promo ? promo.descuentoPct : item.descuentoPct;
             const subtotalCent = calcularSubtotalCentavos(
               item.precioUnitario,
               cantNum,
-              item.descuentoPct,
+              descPct,
               item.descuentoMonto,
             );
             const itemActualizado: ItemCarrito = {
               ...item,
               cantidad: cantStr,
+              descuentoPct: descPct,
               subtotal: deCentavos(subtotalCent),
+              reglaPromoNombre: promo ? promo.reglaNombre : undefined,
+              descuentoVolumenAplicado: Boolean(promo),
+              preciosPorLista: item.preciosPorLista ?? prod.precios,
+              costoBase: item.costoBase ?? prod.costoBase,
             };
             const copia = [...prev];
             copia[idx] = itemActualizado;
             return copia;
           }
+
+          const promo = evaluarDescuentoVolumen({
+            productoId: prod.id,
+            rubroId: prod.rubroId ?? undefined,
+            listaPrecioId: listaPrecioIdSeleccionada,
+            cantidad: 1,
+            reglas: reglasVolumen,
+          });
+          const descPct = promo ? promo.descuentoPct : '0';
+          const subtotalCent = calcularSubtotalCentavos(
+            precioUnit,
+            1,
+            descPct,
+            '0.00',
+          );
 
           const nuevoItem: ItemCarrito = {
             id: generarUuid(),
@@ -1097,9 +1177,13 @@ export function App(): ReactElement {
             permiteFraccion: prod.permiteFraccion,
             cantidad: '1.000',
             precioUnitario: precioUnit,
-            descuentoPct: '0',
+            descuentoPct: descPct,
             descuentoMonto: '0.00',
-            subtotal: precioUnit,
+            subtotal: deCentavos(subtotalCent),
+            reglaPromoNombre: promo ? promo.reglaNombre : undefined,
+            descuentoVolumenAplicado: Boolean(promo),
+            preciosPorLista: prod.precios,
+            costoBase: prod.costoBase,
           };
           return [...prev, nuevoItem];
         });
@@ -1114,7 +1198,7 @@ export function App(): ReactElement {
         setBuscandoProducto(false);
       }
     },
-    [listaPrecioIdSeleccionada, operadorActivo],
+    [listaPrecioIdSeleccionada, listasPrecios, operadorActivo, reglasVolumen],
   );
 
   useEffect(() => {

@@ -152,6 +152,7 @@ interface TestLookupResponse {
   codigoBarra: string;
   nombre?: string;
   stockActualBase?: string;
+  precios?: Record<string, string>;
 }
 
   it('permite dar de alta un producto con fraccionamiento y códigos de barra', async () => {
@@ -321,6 +322,8 @@ interface TestLookupResponse {
     expect(lookup.origen).toBe('local');
     expect(lookup.nombre).toContain('Cable Taller');
     expect(lookup.stockActualBase).toBe('4.750');
+    expect(lookup.precios).toBeDefined();
+    expect(lookup.precios?.['Mostrador']).toBeDefined();
   });
 
   it('hace fallback a búsqueda externa cuando el código no existe en la base local', async () => {

@@ -3,6 +3,8 @@ import {
   agregarDigitoTeclado,
   calcularSubtotalCentavos,
   formatearPesos,
+  obtenerPrecioUnitarioSegunLista,
+  type ListaPrecioItem,
 } from './App.js';
 import {
   encolarOperacion,
@@ -35,6 +37,48 @@ describe('@ferreteria/web utilidades de formato, teclado y cola offline', () => 
     // 1 unidad a $ 5.000,00 con $ 500,00 de descuento en monto = $ 4.500,00 -> 450000 centavos
     const subtotalConMonto = calcularSubtotalCentavos('5000.00', 1, '0', '500.00');
     expect(subtotalConMonto).toBe(450000n);
+  });
+
+  it('resuelve correctamente el precio de venta unitario según la lista activa sin caer al costo base', () => {
+    const listasPrueba: ListaPrecioItem[] = [
+      { id: '11111111-0000-0000-0000-000000000001', nombre: 'Mostrador', margenPct: '40.00', orden: 1 },
+      { id: '22222222-0000-0000-0000-000000000002', nombre: 'Gremio', margenPct: '25.00', orden: 2 },
+      { id: '33333333-0000-0000-0000-000000000003', nombre: 'Mayorista', margenPct: '15.00', orden: 3 },
+    ];
+
+    // Caso 1: Precios indexados por UUID de lista
+    const preciosPorId: Record<string, string> = {
+      '11111111-0000-0000-0000-000000000001': '1400.00',
+      '22222222-0000-0000-0000-000000000002': '1250.00',
+    };
+    expect(
+      obtenerPrecioUnitarioSegunLista(preciosPorId, '11111111-0000-0000-0000-000000000001', listasPrueba, '1000.00'),
+    ).toBe('1400.00');
+    expect(
+      obtenerPrecioUnitarioSegunLista(preciosPorId, '22222222-0000-0000-0000-000000000002', listasPrueba, '1000.00'),
+    ).toBe('1250.00');
+
+    // Caso 2: Precios indexados por nombre de lista (ej: legacy o vista)
+    const preciosPorNombre: Record<string, string> = {
+      Mostrador: '1400.00',
+      Gremio: '1250.00',
+      Mayorista: '1150.00',
+    };
+    expect(
+      obtenerPrecioUnitarioSegunLista(preciosPorNombre, '22222222-0000-0000-0000-000000000002', listasPrueba, '1000.00'),
+    ).toBe('1250.00');
+    expect(
+      obtenerPrecioUnitarioSegunLista(preciosPorNombre, '33333333-0000-0000-0000-000000000003', listasPrueba, '1000.00'),
+    ).toBe('1150.00');
+
+    // Caso 3: Sin precio precalculado para esa lista, calcula según el margen dinámico (Costo 1000 + 40% = 1400)
+    expect(
+      obtenerPrecioUnitarioSegunLista({}, '11111111-0000-0000-0000-000000000001', listasPrueba, '1000.00'),
+    ).toBe('1400.00');
+    // Para Gremio (Costo 1000 + 25% = 1250)
+    expect(
+      obtenerPrecioUnitarioSegunLista(undefined, '22222222-0000-0000-0000-000000000002', listasPrueba, '1000.00'),
+    ).toBe('1250.00');
   });
 
   it('opera el teclado numérico de mostrador en pocos toques', () => {

@@ -862,3 +862,26 @@ Estado:
 - [x] Verificación de calidad:
   - `pnpm typecheck`, `pnpm lint` y `pnpm --filter @ferreteria/web build` superados sin errores ni advertencias.
   - Suite completa Vitest: **22 archivos de prueba, 128 tests pasando al 100%** en PostgreSQL real.
+
+---
+
+## Mejora continua — Precios por lista al escanear y Duplicación de artículos en Catálogo (Completada ✅)
+
+Objetivo:
+1. Corregir la asignación de precios al escanear o buscar productos en el mostrador para que aplique siempre el precio según el margen de la lista activa seleccionada (Mostrador, Gremio, Mayorista) en lugar de caer al costo base.
+2. Incorporar la función de duplicar/copiar artículos en el ABM de catálogo para acelerar la carga de artículos similares.
+
+Estado:
+- [x] Backend API (`apps/api/src/routes/productos.ts`):
+  - Indexación de precios por partida doble en `GET /productos/lookup-ean/:codigo` y `GET /productos`: tanto por ID de lista (`lista_precio_id`) como por nombre de lista (`lista_nombre`).
+  - Cobertura de pruebas en `apps/api/src/routes/productos.test.ts` (16 tests pasando).
+- [x] Frontend Web (`apps/web/src/App.tsx`, `App.test.ts`, `CatalogoStock.tsx`):
+  - Función de utilidad pura `obtenerPrecioUnitarioSegunLista(precios, listaId, listasPrecios, costoBase)` que resuelve el precio por UUID de lista, nombre de lista, fallback Mostrador o cálculo dinámico por margen de lista sobre costo base, garantizando que nunca se venda a costo base por error.
+  - Al escanear con pistola o agregar código en el mostrador, se guarda `preciosPorLista` y `costoBase` en el `ItemCarrito` y se revalúa el descuento por volumen si aplica.
+  - Al cambiar de lista de precios en mostrador, se recalculan automáticamente todos los artículos del carrito.
+  - Botón de acción `📋` (Duplicar) en cada fila del catálogo en `CatalogoStock.tsx`, que abre el modal de alta con todos los campos precompletados (nombre con sufijo `(Copia)`, código sugerido `${codigo}-COPIA`, costo base, rubro, unidades, fraccionamiento, stock mínimo e imagen) y códigos de barra limpios para asignar el del nuevo producto.
+  - Suite de pruebas unitarias en `apps/web/src/App.test.ts` (7 tests pasando).
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero errores y cero advertencias.
+  - `pnpm --filter @ferreteria/web build` compilado exitosamente.
