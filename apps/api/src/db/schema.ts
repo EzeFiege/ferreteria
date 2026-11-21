@@ -206,6 +206,7 @@ export const producto = pgTable('producto', {
   costoBase: numeric('costo_base', { precision: 14, scale: 2 })
     .notNull()
     .default('0.00'),
+  margenGananciaPct: numeric('margen_ganancia_pct', { precision: 5, scale: 2 }),
   unidadPrincipal: text('unidad_principal').notNull().default('un'),
   unidadSecundaria: text('unidad_secundaria'),
   factorConversion: numeric('factor_conversion', { precision: 14, scale: 3 })

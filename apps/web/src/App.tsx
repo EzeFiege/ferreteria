@@ -5,6 +5,7 @@ import {
   evaluarDescuentoVolumen,
   formatearMensajeTicket,
   generarLinkWhatsApp,
+  normalizarTelefonoWhatsApp,
   type DatosEmpresaItem,
   type ReglaDescuentoVolumenItem,
   type ReglaRedondeoPrecios,
@@ -488,8 +489,38 @@ export function App(): ReactElement {
   const [sincronizando, setSincronizando] = useState<boolean>(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ultimaVentaParaTicket, setUltimaVentaParaTicket] = useState<DatosTicketTermico | null>(null);
+  const [ultimaVentaId, setUltimaVentaId] = useState<string | null>(null);
   const [emitirFacturaElectronica, setEmitirFacturaElectronica] = useState<boolean>(false);
   const [ultimaFacturaEmitida, setUltimaFacturaEmitida] = useState<ComprobanteFiscalDetalle | null>(null);
+  const [modalWhatsAppTicket, setModalWhatsAppTicket] = useState<{
+    abierto: boolean;
+    telefono: string;
+    mensaje: string;
+    copiado?: boolean;
+  } | null>(null);
+  const [modalCorregirCobro, setModalCorregirCobro] = useState<{
+    abierto: boolean;
+    ventaId: string;
+    numeroTicket?: string | number | undefined;
+    medioActualId?: string | undefined;
+    medioActualNombre?: string | undefined;
+    totalPesos: string;
+    nuevoMedioId: string;
+    motivo: string;
+    guardando?: boolean | undefined;
+  } | null>(null);
+  const [ventasRecientesTurno, setVentasRecientesTurno] = useState<
+    Array<{
+      venta_id: string;
+      numero: string;
+      total: string;
+      creado_en: string;
+      cliente_nombre: string | null;
+      medio_pago_id: string;
+      medio_pago_nombre: string;
+    }>
+  >([]);
+  const [mostrarHistorialVentasTurno, setMostrarHistorialVentasTurno] = useState<boolean>(false);
 
   const recargarCola = useCallback(async () => {
     const lista = await listarOperacionesPendientes();
@@ -686,6 +717,82 @@ export function App(): ReactElement {
     },
     [],
   );
+
+  const cargarVentasRecientesTurno = useCallback(
+    async (idTurno: string, token: string) => {
+      try {
+        const res = await fetch(apiUrl(`/api/turnos/${idTurno}/ventas-recientes`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = (await res.json()) as Array<{
+            venta_id: string;
+            numero: string;
+            total: string;
+            creado_en: string;
+            cliente_nombre: string | null;
+            medio_pago_id: string;
+            medio_pago_nombre: string;
+          }>;
+          setVentasRecientesTurno(data);
+        }
+      } catch {
+        // Ignora si offline
+      }
+    },
+    [],
+  );
+
+  const ejecutarCambioMedioPago = async (e: React.SyntheticEvent): Promise<void> => {
+    e.preventDefault();
+    if (!modalCorregirCobro || !operadorActivo) return;
+    if (!modalCorregirCobro.nuevoMedioId) {
+      setAviso('Por favor seleccioná el nuevo medio de cobro.');
+      return;
+    }
+
+    setModalCorregirCobro((prev) => (prev ? { ...prev, guardando: true } : null));
+
+    try {
+      const res = await fetch(
+        apiUrl(`/api/ventas/${modalCorregirCobro.ventaId}/cambiar-medio-pago`),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${operadorActivo.token}`,
+          },
+          body: JSON.stringify({
+            nuevoMedioPagoId: modalCorregirCobro.nuevoMedioId,
+            motivo: modalCorregirCobro.motivo.trim() || undefined,
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error ?? 'Error al corregir medio de pago');
+      }
+
+      const resultado = (await res.json()) as { medioPagoNombre: string };
+      setAviso(`✓ Medio de cobro actualizado a "${resultado.medioPagoNombre}". Asientos y arqueo corregidos.`);
+      setModalCorregirCobro(null);
+
+      // Actualizar si es la última venta mostrada en el banner
+      setUltimaVentaParaTicket((prev) =>
+        prev ? { ...prev, medioCobro: resultado.medioPagoNombre } : null,
+      );
+
+      if (turnoId) {
+        void cargarResumenTurno(turnoId, operadorActivo.token);
+        void cargarVentasRecientesTurno(turnoId, operadorActivo.token);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al cambiar medio de pago';
+      setAviso(`Error: ${msg}`);
+      setModalCorregirCobro((prev) => (prev ? { ...prev, guardando: false } : null));
+    }
+  };
 
   useEffect(() => {
     void recargarCola();
@@ -1515,6 +1622,7 @@ export function App(): ReactElement {
       total: montoVentaFormateado,
     };
     setUltimaVentaParaTicket(datosTicket);
+    setUltimaVentaId(ventaId);
     setUltimaFacturaEmitida(null);
 
     setMontoEnteroTeclado('0');
@@ -2457,37 +2565,296 @@ export function App(): ReactElement {
                     data-testid="btn-whatsapp-ticket"
                     onClick={() => {
                       const telDefault = clienteSeleccionadoVenta?.telefono ?? '';
-                      const telIngresado = window.prompt(
-                        'Ingresá el celular de WhatsApp del cliente (o dejalo vacío para seleccionar contacto en WhatsApp):',
-                        telDefault
-                      );
-                      if (telIngresado !== null) {
-                        const msg = formatearMensajeTicket({
-                          nombreNegocio: ultimaVentaParaTicket.nombreComercio || 'Ferretería & Corralón',
-                          nombreCliente: clienteSeleccionadoVenta?.nombre ?? (ultimaFacturaEmitida?.razonSocialCliente ?? null),
-                          numeroTicket: ultimaFacturaEmitida?.numeroComprobante ?? ultimaVentaParaTicket.numeroTicket,
-                          totalPesos: formatearPesos(ultimaFacturaEmitida ? ultimaFacturaEmitida.total : ultimaVentaParaTicket.total),
-                          medioCobro: ultimaVentaParaTicket.medioCobro,
-                          cantidadArticulos: ultimaVentaParaTicket.items.length,
-                        });
-                        const link = generarLinkWhatsApp(telIngresado, msg);
-                        window.open(link, '_blank');
-                      }
+                      const msg = formatearMensajeTicket({
+                        nombreNegocio: ultimaVentaParaTicket.nombreComercio || 'Ferretería & Corralón',
+                        nombreCliente: clienteSeleccionadoVenta?.nombre ?? (ultimaFacturaEmitida?.razonSocialCliente ?? null),
+                        numeroTicket: ultimaFacturaEmitida?.numeroComprobante ?? ultimaVentaParaTicket.numeroTicket,
+                        totalPesos: formatearPesos(ultimaFacturaEmitida ? ultimaFacturaEmitida.total : ultimaVentaParaTicket.total),
+                        medioCobro: ultimaVentaParaTicket.medioCobro,
+                        cantidadArticulos: ultimaVentaParaTicket.items.length,
+                      });
+                      setModalWhatsAppTicket({
+                        abierto: true,
+                        telefono: telDefault,
+                        mensaje: msg,
+                        copiado: false,
+                      });
                     }}
                     className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
                   >
                     <span>📲</span> WhatsApp
                   </button>
-<button
+                  {ultimaVentaId && (
+                    <button
+                      type="button"
+                      data-testid="btn-corregir-cobro-banner"
+                      onClick={() => {
+                        const medioActual = contexto.mediosPago.find(
+                          (m) => m.nombre.toLowerCase() === ultimaVentaParaTicket.medioCobro.toLowerCase(),
+                        );
+                        setModalCorregirCobro({
+                          abierto: true,
+                          ventaId: ultimaVentaId,
+                          numeroTicket: ultimaVentaParaTicket.numeroTicket,
+                          medioActualId: medioActual?.id,
+                          medioActualNombre: ultimaVentaParaTicket.medioCobro,
+                          totalPesos: formatearPesos(ultimaVentaParaTicket.total),
+                          nuevoMedioId: medioActual?.id ?? (contexto.mediosPago[0]?.id ?? ''),
+                          motivo: '',
+                          guardando: false,
+                        });
+                      }}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 shadow-sm flex items-center gap-1.5"
+                    >
+                      <span>✏️</span> Corregir Cobro
+                    </button>
+                  )}
+                  <button
                     type="button"
                     onClick={() => {
                       setUltimaVentaParaTicket(null);
+                      setUltimaVentaId(null);
                       setUltimaFacturaEmitida(null);
                     }}
                     className="rounded-lg bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-300"
                   >
                     ✕ Cerrar
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL ENVIAR TICKET POR WHATSAPP */}
+            {modalWhatsAppTicket?.abierto && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+                <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-lg text-emerald-700 font-bold">
+                        📲
+                      </span>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-base">Enviar Ticket por WhatsApp</h3>
+                        <p className="text-xs text-slate-500">Comprobante y detalle de compra</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalWhatsAppTicket(null);
+                      }}
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Número de Celular (con código de área sin 0 ni 15):
+                      </label>
+                      <input
+                        type="tel"
+                        autoFocus
+                        value={modalWhatsAppTicket.telefono}
+                        onChange={(e) => {
+                          setModalWhatsAppTicket({
+                            ...modalWhatsAppTicket,
+                            telefono: e.target.value,
+                            copiado: false,
+                          });
+                        }}
+                        placeholder="Ej: 11 2345 6789 o 341 555 4321"
+                        className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm font-medium text-slate-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                      {modalWhatsAppTicket.telefono.trim() ? (
+                        <p className="mt-1 text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                          <span>✓ Se enviará al:</span>
+                          <span className="font-mono bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            +{normalizarTelefonoWhatsApp(modalWhatsAppTicket.telefono)}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Si lo dejás vacío, se abrirá WhatsApp para que elijas el chat o contacto manualmente.
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-semibold text-slate-700">
+                          Mensaje que se enviará:
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void (async () => {
+                              try {
+                                await navigator.clipboard.writeText(modalWhatsAppTicket.mensaje);
+                                setModalWhatsAppTicket({ ...modalWhatsAppTicket, copiado: true });
+                                setTimeout(() => {
+                                  setModalWhatsAppTicket((prev) => (prev ? { ...prev, copiado: false } : null));
+                                }, 2500);
+                              } catch {
+                                // fallback
+                              }
+                            })();
+                          }}
+                          className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline flex items-center gap-1"
+                        >
+                          {modalWhatsAppTicket.copiado ? '✓ ¡Mensaje Copiado!' : '📋 Copiar texto'}
+                        </button>
+                      </div>
+                      <textarea
+                        readOnly
+                        rows={5}
+                        value={modalWhatsAppTicket.mensaje}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700 focus:outline-none resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalWhatsAppTicket(null);
+                      }}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const link = generarLinkWhatsApp(
+                          modalWhatsAppTicket.telefono,
+                          modalWhatsAppTicket.mensaje
+                        );
+                        window.open(link, '_blank');
+                        setModalWhatsAppTicket(null);
+                      }}
+                      className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
+                    >
+                      <span>📲</span> Abrir WhatsApp
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL CORREGIR MEDIO DE COBRO */}
+            {modalCorregirCobro?.abierto && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+                <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-lg text-amber-700 font-bold">
+                        ✏️
+                      </span>
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-base">Corregir Medio de Cobro</h3>
+                        <p className="text-xs text-slate-500">
+                          {modalCorregirCobro.numeroTicket
+                            ? `Ticket #${modalCorregirCobro.numeroTicket}`
+                            : `Venta ID ${modalCorregirCobro.ventaId.slice(0, 8)}`}
+                          {' · '}
+                          <span className="font-bold text-slate-800">{modalCorregirCobro.totalPesos}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalCorregirCobro(null);
+                      }}
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      void ejecutarCambioMedioPago(e);
+                    }}
+                    className="mt-4 space-y-4"
+                  >
+                    <div className="rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs space-y-1">
+                      <div className="text-slate-500">Medio registrado actualmente:</div>
+                      <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                        {modalCorregirCobro.medioActualNombre || 'Cobro registrado'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                        Nuevo Medio de Cobro Correcto:
+                      </label>
+                      <select
+                        required
+                        value={modalCorregirCobro.nuevoMedioId}
+                        onChange={(e) => {
+                          setModalCorregirCobro({
+                            ...modalCorregirCobro,
+                            nuevoMedioId: e.target.value,
+                          });
+                        }}
+                        className="w-full rounded-xl border border-slate-300 p-2.5 text-sm font-bold text-slate-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      >
+                        {contexto.mediosPago.map((mp) => (
+                          <option key={mp.id} value={mp.id}>
+                            {mp.nombre} {mp.esEfectivo ? '(Cajón / Efectivo)' : '(Electrónico)'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Motivo de la corrección <span className="font-normal text-slate-400">(opcional)</span>:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Se marcó Efectivo por error pero pagó con Débito"
+                        value={modalCorregirCobro.motivo}
+                        onChange={(e) => {
+                          setModalCorregirCobro({
+                            ...modalCorregirCobro,
+                            motivo: e.target.value,
+                          });
+                        }}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                      />
+                    </div>
+
+                    <div className="rounded-xl bg-amber-50/70 p-3 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                      💡 <strong>Seguridad contable:</strong> El sistema revertirá el ingreso del medio anterior
+                      y registrará el nuevo ingreso en el medio correcto en el turno actual, garantizando que el arqueo de caja cuadre a la perfección.
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalCorregirCobro(null);
+                        }}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={modalCorregirCobro.guardando}
+                        className="rounded-xl bg-amber-600 px-5 py-2 text-xs font-bold text-white hover:bg-amber-700 shadow-md shadow-amber-600/20 transition disabled:opacity-50"
+                      >
+                        {modalCorregirCobro.guardando ? 'Guardando corrección...' : '✓ Aplicar Corrección'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}
@@ -3600,25 +3967,107 @@ export function App(): ReactElement {
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-bold text-slate-800">
                 Ventas confirmadas por medio de cobro y rubro
               </h3>
-              {ventasPorMedio.length > 0 && (
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  data-testid="btn-ver-ventas-turno"
                   onClick={() => {
-                    const columnas = ['Medio de Cobro', 'Rubro', 'Total ($)'];
-                    const filas = ventasPorMedio.map((v) => [v.medioPago, v.rubro, v.total]);
-                    exportarACSV(`ventas_turno_${turnoId ?? 'actual'}`, columnas, filas);
+                    const nuevoEstado = !mostrarHistorialVentasTurno;
+                    setMostrarHistorialVentasTurno(nuevoEstado);
+                    if (nuevoEstado && turnoId) {
+                      void cargarVentasRecientesTurno(turnoId, operadorActivo.token);
+                    }
                   }}
-                  className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                  className="rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 text-xs font-semibold hover:bg-indigo-100 transition flex items-center gap-1"
                 >
-                  Exportar a Excel 📊
+                  <span>📋</span> {mostrarHistorialVentasTurno ? 'Ver Resumen' : 'Ver / Corregir Ventas'}
                 </button>
-              )}
+                {ventasPorMedio.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const columnas = ['Medio de Cobro', 'Rubro', 'Total ($)'];
+                      const filas = ventasPorMedio.map((v) => [v.medioPago, v.rubro, v.total]);
+                      exportarACSV(`ventas_turno_${turnoId ?? 'actual'}`, columnas, filas);
+                    }}
+                    className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                  >
+                    Exportar a Excel 📊
+                  </button>
+                )}
+              </div>
             </div>
-            {ventasPorMedio.length === 0 ? (
+
+            {mostrarHistorialVentasTurno ? (
+              <div className="mt-3 space-y-2">
+                <div className="text-xs font-semibold text-slate-500 flex items-center justify-between">
+                  <span>Listado de ventas en este turno:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (turnoId) {
+                        void cargarVentasRecientesTurno(turnoId, operadorActivo.token);
+                      }
+                    }}
+                    className="text-indigo-600 hover:underline text-[11px]"
+                  >
+                    🔄 Actualizar
+                  </button>
+                </div>
+                {ventasRecientesTurno.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-2">
+                    No se encontraron ventas registradas en el turno actual.
+                  </p>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50/50">
+                    {ventasRecientesTurno.map((v) => (
+                      <div
+                        key={v.venta_id}
+                        className="flex items-center justify-between p-2.5 hover:bg-white transition"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                            <span>Venta #{v.numero}</span>
+                            <span className="font-semibold text-slate-500 font-mono">
+                              ({formatearPesos(v.total)})
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                            <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {v.medio_pago_nombre}
+                            </span>
+                            {v.cliente_nombre && <span>· {v.cliente_nombre}</span>}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalCorregirCobro({
+                              abierto: true,
+                              ventaId: v.venta_id,
+                              numeroTicket: v.numero,
+                              medioActualId: v.medio_pago_id,
+                              medioActualNombre: v.medio_pago_nombre,
+                              totalPesos: formatearPesos(v.total),
+                              nuevoMedioId: v.medio_pago_id,
+                              motivo: '',
+                              guardando: false,
+                            });
+                          }}
+                          className="rounded-lg bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-1 text-xs font-bold hover:bg-amber-100 transition flex items-center gap-1"
+                        >
+                          <span>✏️</span> Corregir Cobro
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : ventasPorMedio.length === 0 ? (
               <p className="mt-2 text-xs text-slate-500">
                 Todavía no hay ventas confirmadas en este turno.
               </p>

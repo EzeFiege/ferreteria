@@ -180,7 +180,7 @@ export function registerProductosRoutes(
         async ({ client }) => {
           const sqlQuery = `
             select p.id, p.codigo, p.sku, p.nombre, p.marca, p.descripcion, p.imagen_url, p.codigo_qr,
-                   p.costo_base, p.unidad_principal, p.unidad_secundaria, p.factor_conversion,
+                   p.costo_base, p.margen_ganancia_pct, p.unidad_principal, p.unidad_secundaria, p.factor_conversion,
                    p.permite_fraccion, p.stock_minimo, p.activo, p.rubro_id,
                    coalesce(r.nombre, 'Sin rubro') as rubro_nombre,
                    coalesce(s.stock_actual_base, 0) as stock_actual_base
@@ -213,6 +213,7 @@ export function registerProductosRoutes(
             imagen_url: string | null;
             codigo_qr: string | null;
             costo_base: string;
+            margen_ganancia_pct: string | null;
             unidad_principal: string;
             unidad_secundaria: string | null;
             factor_conversion: string;
@@ -349,6 +350,7 @@ export function registerProductosRoutes(
               imagenUrl: normalizarUrlImagen(body.imagenUrl) || null,
               codigoQr: body.codigoQr ?? null,
               costoBase: body.costoBase,
+              margenGananciaPct: body.margenGananciaPct || null,
               unidadPrincipal: body.unidadPrincipal,
               unidadSecundaria: body.unidadSecundaria || null,
               factorConversion: body.factorConversion,
@@ -410,6 +412,7 @@ export function registerProductosRoutes(
               imagenUrl: normalizarUrlImagen(body.imagenUrl) || null,
               codigoQr: body.codigoQr ?? null,
               costoBase: body.costoBase,
+              margenGananciaPct: body.margenGananciaPct || null,
               unidadPrincipal: body.unidadPrincipal,
               unidadSecundaria: body.unidadSecundaria || null,
               factorConversion: body.factorConversion,

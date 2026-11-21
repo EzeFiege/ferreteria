@@ -41,14 +41,14 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
       (it) => `
       <tr>
         <td style="text-align: left; padding: 2px 0; vertical-align: top;">
-          <div>${it.descripcion}</div>
+          <div style="font-weight: 700; color: #000;">${it.descripcion}</div>
           ${
             parseFloat(it.cantidad) > 1
-              ? `<div style="font-size: 10px; color: #555;">${it.cantidad} x $ ${it.precioUnitario}</div>`
+              ? `<div style="font-size: 11px; font-weight: 700; color: #000;">${it.cantidad} x $ ${it.precioUnitario}</div>`
               : ''
           }
         </td>
-        <td style="text-align: right; padding: 2px 0; white-space: nowrap; vertical-align: top; font-weight: bold;">
+        <td style="text-align: right; padding: 2px 0; white-space: nowrap; vertical-align: top; font-weight: 900; color: #000;">
           $ ${it.subtotal}
         </td>
       </tr>
@@ -71,14 +71,15 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
           box-sizing: border-box;
         }
         body {
-          font-family: 'Courier New', Courier, monospace;
-          font-size: 12px;
-          line-height: 1.25;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.3;
           margin: 0;
           padding: 8px 6px;
           width: ${anchoMm === 58 ? '48mm' : '72mm'};
           max-width: ${anchoMm === 58 ? '48mm' : '72mm'};
-          color: #000;
+          color: #000 !important;
           background: #fff;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
@@ -106,22 +107,23 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
         }
         .text-center { text-align: center; }
         .text-right { text-align: right; }
-        .font-bold { font-weight: bold; }
+        .font-bold { font-weight: 800; }
         .divider {
-          border-top: 1px dashed #000;
+          border-top: 1.5px solid #000;
           margin: 6px 0;
         }
         .double-divider {
-          border-top: 2px solid #000;
+          border-top: 2.5px solid #000;
           margin: 6px 0;
         }
         table {
           width: 100%;
           border-collapse: collapse;
+          color: #000 !important;
         }
         .total-box {
-          font-size: 14px;
-          font-weight: bold;
+          font-size: 15px;
+          font-weight: 900;
         }
         @media print {
           body {
@@ -229,7 +231,7 @@ export function imprimirTicketTermico(datos: DatosTicketTermico): void {
 
       <div class="divider"></div>
 
-      <div class="text-center" style="font-size: 10px; color: #555; margin-top: 6px;">
+      <div class="text-center" style="font-size: 11px; font-weight: 700; color: #000; margin-top: 6px;">
         <div>¡Gracias por su compra!</div>
         <div style="margin-top: 2px;">Comprobante no fiscal - Ticket de control</div>
       </div>

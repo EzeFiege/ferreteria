@@ -104,10 +104,10 @@ export function imprimirComprobanteFiscal(
             (it) => `
             <tr>
               <td style="padding: 2px 0; text-align: left; vertical-align: top;">
-                <div>${it.descripcion}</div>
-                <div style="font-size: 10px; color: #555;">${it.cantidad} ${it.unidad} x $ ${it.precioUnitario}</div>
+                <div style="font-weight: 700; color: #000;">${it.descripcion}</div>
+                <div style="font-size: 11px; font-weight: 700; color: #000;">${it.cantidad} ${it.unidad} x $ ${it.precioUnitario}</div>
               </td>
-              <td style="padding: 2px 0; text-align: right; vertical-align: top; font-weight: bold; white-space: nowrap;">
+              <td style="padding: 2px 0; text-align: right; vertical-align: top; font-weight: 900; color: #000; white-space: nowrap;">
                 $ ${it.subtotal}
               </td>
             </tr>
@@ -116,8 +116,8 @@ export function imprimirComprobanteFiscal(
           .join('')
       : `
         <tr>
-          <td style="padding: 4px 0;">Venta global</td>
-          <td style="padding: 4px 0; text-align: right; font-weight: bold;">$ ${comprobante.total}</td>
+          <td style="padding: 4px 0; font-weight: 700; color: #000;">Venta global</td>
+          <td style="padding: 4px 0; text-align: right; font-weight: 900; color: #000;">$ ${comprobante.total}</td>
         </tr>
       `;
 
@@ -136,15 +136,18 @@ export function imprimirComprobanteFiscal(
             box-sizing: border-box;
           }
           body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 11px;
-            color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            color: #000 !important;
             background: #fff;
             margin: 0;
             padding: 8px 6px;
             width: 72mm;
             max-width: 72mm;
-            line-height: 1.25;
+            line-height: 1.3;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .no-print {
             display: flex;
@@ -168,11 +171,11 @@ export function imprimirComprobanteFiscal(
             font-size: 11px;
           }
           .divider {
-            border-top: 1px dashed #000;
+            border-top: 1.5px solid #000;
             margin: 6px 0;
           }
           .double-divider {
-            border-top: 2px solid #000;
+            border-top: 2.5px solid #000;
             margin: 6px 0;
           }
           .letra-box {
@@ -186,6 +189,7 @@ export function imprimirComprobanteFiscal(
           table {
             width: 100%;
             border-collapse: collapse;
+            color: #000 !important;
           }
           @media print {
             .no-print { display: none !important; }

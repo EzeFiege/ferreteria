@@ -603,14 +603,111 @@ describe('Etapa 1 — Núcleo de caja (API + PostgreSQL real)', () => {
       },
     });
     expect(nuevoTurnoRes.statusCode).toBe(201);
-    expect(
-      nuevoTurnoRes.json<{
-        turno: { efectivoInicial: string };
-        efectivoSugeridoUltimoCierre: string;
-      }>(),
-    ).toMatchObject({
+    const turnoCreado = nuevoTurnoRes.json<{
+      turno: { id: string; efectivoInicial: string };
+      efectivoSugeridoUltimoCierre: string;
+    }>();
+    expect(turnoCreado).toMatchObject({
       turno: { efectivoInicial: '6450.00' },
       efectivoSugeridoUltimoCierre: '6450.00',
     });
+
+    // Cerrar para dejar la caja libre
+    await server.inject({
+      method: 'POST',
+      url: `/turnos/${turnoCreado.turno.id}/cerrar`,
+      headers: { authorization: `Bearer ${norte.tokenEncargado}` },
+      payload: { efectivoContado: '6450.00' },
+    });
+  });
+
+  it('permite corregir el medio de cobro de una venta de forma inmutable (reversión + nuevo movimiento)', async () => {
+    // 1. Abrir un turno limpio para la prueba
+    const abrirRes = await server.inject({
+      method: 'POST',
+      url: '/turnos/abrir',
+      headers: { authorization: `Bearer ${norte.tokenCajero}` },
+      payload: { cajaId: norte.cajaId, efectivoInicial: '1000.00' },
+    });
+    expect(abrirRes.statusCode).toBe(201);
+    const turnoId = abrirRes.json<{ turno: { id: string } }>().turno.id;
+
+    const resumenPrevioRes = await server.inject({
+      method: 'GET',
+      url: `/turnos/${turnoId}/resumen`,
+      headers: { authorization: `Bearer ${norte.tokenCajero}` },
+    });
+    const esperadoPrevio = resumenPrevioRes.json<{ resumen: { efectivoEsperado: string } }>().resumen.efectivoEsperado;
+
+    // 2. Registrar una venta cobrada en Efectivo ($2.500,00)
+    const ventaId = randomUUID();
+    const movOriginalId = randomUUID();
+    const ventaRes = await server.inject({
+      method: 'POST',
+      url: '/ventas',
+      headers: { authorization: `Bearer ${norte.tokenCajero}` },
+      payload: {
+        id: ventaId,
+        turnoId,
+        total: '2500.00',
+        pagos: [
+          {
+            movimientoId: movOriginalId,
+            medioPagoId: norte.medioEfectivoId,
+            monto: '2500.00',
+          },
+        ],
+      },
+    });
+    expect(ventaRes.statusCode).toBe(201);
+
+    // 3. Corregir medio de cobro a Tarjeta
+    const cambioRes = await server.inject({
+      method: 'POST',
+      url: `/ventas/${ventaId}/cambiar-medio-pago`,
+      headers: { authorization: `Bearer ${norte.tokenCajero}` },
+      payload: {
+        nuevoMedioPagoId: norte.medioTarjetaId,
+        motivo: 'El cliente pagó con tarjeta de débito',
+      },
+    });
+    expect(cambioRes.statusCode).toBe(200);
+    const cambioBody = cambioRes.json<{
+      ventaId: string;
+      medioPagoId: string;
+      medioPagoNombre: string;
+      monto: string;
+      reversionId: string;
+      nuevoMovimientoId: string;
+    }>();
+    expect(cambioBody.medioPagoId).toBe(norte.medioTarjetaId);
+    expect(cambioBody.monto).toBe('2500.00');
+
+    // 4. Verificar que el resumen del turno refleje la corrección:
+    // La venta ya no suma al cajón, el efectivo esperado vuelve al valor previo.
+    const resumenRes = await server.inject({
+      method: 'GET',
+      url: `/turnos/${turnoId}/resumen`,
+      headers: { authorization: `Bearer ${norte.tokenCajero}` },
+    });
+    expect(resumenRes.statusCode).toBe(200);
+    const resumen = resumenRes.json<{
+      resumen: { efectivoEsperado: string };
+      ventasPorMedioRubro: Array<{ medioPago: string; total: string }>;
+    }>();
+    expect(resumen.resumen.efectivoEsperado).toBe(esperadoPrevio);
+    expect(resumen.ventasPorMedioRubro).toContainEqual(
+      expect.objectContaining({ medioPago: 'Tarjeta', total: '2500.00' }),
+    );
+
+    // 5. Verificar endpoint de ventas recientes
+    const recientesRes = await server.inject({
+      method: 'GET',
+      url: `/turnos/${turnoId}/ventas-recientes`,
+      headers: { authorization: `Bearer ${norte.tokenCajero}` },
+    });
+    expect(recientesRes.statusCode).toBe(200);
+    const recientes = recientesRes.json<Array<{ venta_id: string; medio_pago_nombre: string }>>();
+    expect(recientes.some((v) => v.venta_id === ventaId && v.medio_pago_nombre === 'Tarjeta')).toBe(true);
   });
 });

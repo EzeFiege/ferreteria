@@ -27,6 +27,7 @@ interface ProductoItem {
   imagen_url: string | null;
   codigo_qr: string | null;
   costo_base: string;
+  margen_ganancia_pct?: string | null;
   unidad_principal: string;
   unidad_secundaria: string | null;
   factor_conversion: string;
@@ -107,6 +108,7 @@ export function CatalogoStock({
   const [formMarca, setFormMarca] = useState<string>('');
   const [formRubroId, setFormRubroId] = useState<string>('');
   const [formCostoBase, setFormCostoBase] = useState<string>('0.00');
+  const [formMargenGananciaPct, setFormMargenGananciaPct] = useState<string>('');
   const [formUnidadPrincipal, setFormUnidadPrincipal] = useState<string>('un');
   const [formUnidadSecundaria, setFormUnidadSecundaria] = useState<string>('');
   const [formFactorConversion, setFormFactorConversion] = useState<string>('1.000');
@@ -277,6 +279,7 @@ export function CatalogoStock({
     setFormMarca('');
     setFormRubroId(rubros[0]?.id ?? '');
     setFormCostoBase('0.00');
+    setFormMargenGananciaPct('');
     setFormUnidadPrincipal('un');
     setFormUnidadSecundaria('');
     setFormFactorConversion('1.000');
@@ -478,6 +481,7 @@ export function CatalogoStock({
     setFormMarca(prod.marca ?? '');
     setFormRubroId(prod.rubro_id ?? (rubros[0]?.id ?? ''));
     setFormCostoBase(prod.costo_base);
+    setFormMargenGananciaPct(prod.margen_ganancia_pct ?? '');
     setFormUnidadPrincipal(prod.unidad_principal);
     setFormUnidadSecundaria(prod.unidad_secundaria ?? '');
     setFormFactorConversion(prod.factor_conversion);
@@ -499,6 +503,7 @@ export function CatalogoStock({
     setFormMarca(prod.marca ?? '');
     setFormRubroId(prod.rubro_id ?? (rubros[0]?.id ?? ''));
     setFormCostoBase(prod.costo_base);
+    setFormMargenGananciaPct(prod.margen_ganancia_pct ?? '');
     setFormUnidadPrincipal(prod.unidad_principal);
     setFormUnidadSecundaria(prod.unidad_secundaria ?? '');
     setFormFactorConversion(prod.factor_conversion);
@@ -526,6 +531,11 @@ export function CatalogoStock({
       marca: formMarca.trim() || undefined,
       rubroId: formRubroId || undefined,
       costoBase: formCostoBase.includes('.') ? formCostoBase : `${formCostoBase || '0'}.00`,
+      margenGananciaPct: formMargenGananciaPct.trim()
+        ? formMargenGananciaPct.includes('.')
+          ? formMargenGananciaPct.trim()
+          : `${formMargenGananciaPct.trim()}.00`
+        : null,
       unidadPrincipal: formUnidadPrincipal.trim() || 'un',
       unidadSecundaria: formPermiteFraccion ? formUnidadSecundaria.trim() || undefined : undefined,
       factorConversion: formPermiteFraccion ? formFactorConversion.trim() || '1.000' : '1.000',
@@ -910,7 +920,12 @@ export function CatalogoStock({
                       </td>
                       <td className="px-4 py-3 text-slate-600">{prod.rubro_nombre}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-700">
-                        {formatearPesos(prod.costo_base)}
+                        <div>{formatearPesos(prod.costo_base)}</div>
+                        {prod.margen_ganancia_pct && (
+                          <div className="text-[10px] font-bold text-emerald-700">
+                            +{prod.margen_ganancia_pct}% margen
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-emerald-800">
                         {prod.precios['Mostrador']
@@ -1251,17 +1266,46 @@ export function CatalogoStock({
                     className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 font-bold"
                   />
                 </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-600 flex items-center justify-between">
+                    <span>Margen Base Propio (%)</span>
+                    <span className="font-normal text-slate-400 lowercase">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 45.00"
+                    value={formMargenGananciaPct}
+                    onChange={(e) => {
+                      setFormMargenGananciaPct(e.target.value);
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-300 p-2 text-sm text-slate-900 font-bold"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {formMargenGananciaPct.trim()
+                      ? `Aplica +${formMargenGananciaPct}% propio en lugar del margen general de la lista.`
+                      : 'Vacío: usa el margen estándar de cada lista de precios.'}
+                  </p>
+                </div>
               </div>
 
               {/* Vista previa de precios calculados según listas */}
               <div className="rounded-xl bg-slate-50 p-3 border border-slate-200">
-                <div className="text-xs font-bold text-slate-700 uppercase">
-                  Precios Calculados por Margen:
+                <div className="text-xs font-bold text-slate-700 uppercase flex items-center justify-between">
+                  <span>Precios Calculados por Margen:</span>
+                  {formMargenGananciaPct.trim() && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      Margen Propio: +{formMargenGananciaPct}%
+                    </span>
+                  )}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                   {listasPrecios.map((lp) => {
                     const costoNum = Number(formCostoBase) || 0;
-                    const precioCalc = costoNum * (1 + Number(lp.margenPct) / 100);
+                    const margenAplicado = formMargenGananciaPct.trim() !== ''
+                      ? Number(formMargenGananciaPct)
+                      : Number(lp.margenPct);
+                    const margenSeguro = isNaN(margenAplicado) ? Number(lp.margenPct) : margenAplicado;
+                    const precioCalc = costoNum * (1 + margenSeguro / 100);
                     const precioRedondeado = aplicarRedondeoPrecio(
                       precioCalc.toFixed(2),
                       lp.redondeo ?? 'ninguno',
@@ -1269,7 +1313,7 @@ export function CatalogoStock({
                     return (
                       <div key={lp.id} className="rounded-lg bg-white p-2 border border-slate-200">
                         <div className="text-slate-500 font-medium">
-                          {lp.nombre} (+{lp.margenPct}%)
+                          {lp.nombre} (+{margenSeguro}%)
                         </div>
                         <div className="font-bold text-slate-900 text-sm">
                           {formatearPesos(precioRedondeado)}

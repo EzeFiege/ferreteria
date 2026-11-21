@@ -885,3 +885,33 @@ Estado:
   - `pnpm typecheck` superado sin errores en todos los workspaces.
   - `pnpm lint` con cero errores y cero advertencias.
   - `pnpm --filter @ferreteria/web build` compilado exitosamente.
+
+---
+
+## Mejora continua — Impresión térmica de alta densidad, WhatsApp interactivo, Margen base por producto y Corrección inmutable de medio de cobro (Completada ✅)
+
+Objetivo:
+1. **Densidad y contraste en impresión térmica:** mejorar la legibilidad en comanderas de 58mm y 80mm eliminando tipografías monoespaciadas tenues y tonos grises (#555/#64748b) en favor de tipografía densa de sistema (`Segoe UI / -apple-system / Arial`) con negro puro `#000000 !important`, mayor peso tipográfico y trazos sólidos.
+2. **Entrega de tickets por WhatsApp:** corregir la normalización de celulares de Argentina (remover el `15` en números de 2, 3 y 4 dígitos de área, soportar prefijos internacionales y fijos con área) y reemplazar el `window.prompt` nativo (bloqueado por popups de navegadores) por un modal interactivo con vista previa, apertura directa en WhatsApp y copiado rápido de mensaje.
+3. **Margen de ganancia propio por producto:** permitir configurar un margen base propio (`margen_ganancia_pct`) sobre el costo para productos específicos que requieran un recargo mayor/diferente al estándar de la lista de precios, actualizando la vista `v_precios_producto`, la API y el formulario del catálogo con previsualización en vivo.
+4. **Corrección de medio de cobro de venta (Regla 1 de AGENTS.md):** permitir corregir el medio de pago si se seleccionó mal al momento de la venta, ejecutando un asiento inverso de compensación (`revierte_id`, sentido `out`, mismo monto y medio original) y un nuevo asiento (`sentido: in`, mismo monto, nuevo medio de pago) en el turno abierto de la caja, garantizando la inmutabilidad y la exactitud del arqueo de caja.
+
+Estado:
+- [x] Migración SQL `db/migrations/024_margen_por_producto.sql`:
+  - Agrega columna `margen_ganancia_pct numeric(5,2)` en tabla `producto`.
+  - Actualiza la vista `v_precios_producto` para aplicar `coalesce(p.margen_ganancia_pct, lp.margen_pct)` con redondeo comercial dinámico.
+- [x] Backend API (`apps/api/src/routes/caja.ts` y `productos.ts`):
+  - Nuevo endpoint `POST /ventas/:ventaId/cambiar-medio-pago` respetando la Regla 1 (solo agregar con `revierte_id` y nuevo movimiento en turno abierto).
+  - Nuevo endpoint `GET /turnos/:turnoId/ventas-recientes` para listar ventas del turno con medio de cobro activo.
+  - Registro de auditoría centralizada con acción `cambiar_medio_pago_venta`.
+  - Pruebas de integración añadidas en `apps/api/src/routes/caja.test.ts` (7 tests pasando al 100%).
+- [x] Frontend Web (`apps/web`):
+  - Utilidades `impresion-ticket.ts` y `impresion-factura.ts` con tipografía densa de alta legibilidad térmica, color `#000 !important` y trazos sólidos.
+  - Modal interactivo de envío por WhatsApp en `App.tsx` con número normalizado, enlace directo y copiado rápido.
+  - Modal de corrección de medio de cobro accesible desde el banner de venta y desde el detalle de ventas del turno.
+  - Campo de margen propio con previsualización dinámica de precios en `CatalogoStock.tsx`.
+- [x] Verificación de calidad:
+  - `pnpm typecheck` superado sin errores en todos los workspaces.
+  - `pnpm lint` con cero errores y cero advertencias.
+  - `pnpm --filter @ferreteria/web build` compilado exitosamente.
+  - Suite de pruebas de caja y catálogo pasando en PostgreSQL real.

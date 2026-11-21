@@ -168,6 +168,9 @@ describe('@ferreteria/shared schemas y aritmética de dinero', () => {
     expect(normalizarTelefonoWhatsApp('11 4567-8901')).toBe('5491145678901');
     expect(normalizarTelefonoWhatsApp('011 15 4567 8901')).toBe('5491145678901');
     expect(normalizarTelefonoWhatsApp('+54 9 11 4567-8901')).toBe('5491145678901');
+    expect(normalizarTelefonoWhatsApp('+54 9 11 15 4567-8901')).toBe('5491145678901');
+    expect(normalizarTelefonoWhatsApp('+54 11 15 4567-8901')).toBe('5491145678901');
+    expect(normalizarTelefonoWhatsApp('15 4567 8901')).toBe('5491145678901');
     expect(normalizarTelefonoWhatsApp('221 456-7890')).toBe('5492214567890');
     expect(normalizarTelefonoWhatsApp('0341 15 1234567')).toBe('5493411234567');
 

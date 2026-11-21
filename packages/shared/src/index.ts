@@ -171,6 +171,17 @@ export const revertirMovimientoSchema = z.object({
 });
 export type RevertirMovimientoInput = z.infer<typeof revertirMovimientoSchema>;
 
+export const cambiarMedioPagoVentaSchema = z.object({
+  nuevoMedioPagoId: uuidSchema,
+  reversionId: uuidSchema.optional(),
+  nuevoMovimientoId: uuidSchema.optional(),
+  turnoId: uuidSchema.optional(),
+  motivo: z.string().trim().max(500).optional(),
+});
+export type CambiarMedioPagoVentaInput = z.infer<
+  typeof cambiarMedioPagoVentaSchema
+>;
+
 export const cerrarTurnoSchema = z.object({
   efectivoContado: montoNoNegativoSchema,
   notas: z.string().max(500).optional(),
@@ -297,6 +308,17 @@ export const imagenProductoSchema = z
   .optional()
   .or(z.literal(''));
 
+export const margenGananciaPctSchema = z
+  .string()
+  .regex(
+    /^\d{1,3}(\.\d{1,2})?$/,
+    'El margen debe ser un porcentaje decimal válido (ej. 35.00)',
+  )
+  .refine((val) => {
+    const centesimos = aCentavos(val);
+    return centesimos >= 0n && centesimos <= 99999n;
+  }, 'El margen debe ser mayor o igual a 0%');
+
 export const guardarProductoSchema = z.object({
   id: uuidSchema.optional(),
   rubroId: uuidSchema.optional(),
@@ -308,6 +330,7 @@ export const guardarProductoSchema = z.object({
   imagenUrl: imagenProductoSchema,
   codigoQr: z.string().trim().max(255).optional(),
   costoBase: montoNoNegativoSchema,
+  margenGananciaPct: margenGananciaPctSchema.optional().nullable().or(z.literal('')),
   unidadPrincipal: z.string().trim().min(1).max(30).default('un'),
   unidadSecundaria: z.string().trim().max(30).optional().or(z.literal('')),
   factorConversion: cantidadDecimalSchema.default('1.000'),
@@ -988,6 +1011,7 @@ export interface PresupuestoDetalle {
 
 export const accionAuditoriaSchema = z.enum([
   'anulacion_venta',
+  'cambiar_medio_pago_venta',
   'arqueo_caja',
   'ajuste_cta_cte_cliente',
   'ajuste_cta_cte_proveedor',
@@ -1855,41 +1879,62 @@ export interface HojaRutaDetalleCompleto {
 // ============================================================================
 
 /**
- * Normaliza un número telefónico a formato internacional E.164 sin '+' para wa.me.
- * Limpia espacios, paréntesis, guiones y barras.
- * Soporta números de Argentina (prefijos 0, 15, o directos de 10 dígitos -> 549...).
+ * Normaliza un número telefónico para la API de WhatsApp.
+ * Soporta números de Argentina en todos sus formatos habituales:
+ * - Directo con código de país: +54 9 11 1234-5678 o 5491112345678
+ * - Con 15 y prefijo país: +54 9 11 15 1234-5678 o 54 11 15 1234-5678
+ * - Formato interurbano con 0 y 15: 011 15 1234 5678 o 0341 15 1234567
+ * - Formato nacional 10 dígitos: 11 1234-5678 o 341 123-4567
+ * - Local con 15: 15 1234 5678 (asume AMBA 11) o local de 8 dígitos
  */
 export function normalizarTelefonoWhatsApp(telefono: string): string {
-  let digitos = telefono.replace(/\D/g, '');
+  const limpio = telefono.trim();
+  let digitos = limpio.replace(/\D/g, '');
 
   if (!digitos) return '';
+
+  const esInternacionalConPlus = limpio.startsWith('+') && !digitos.startsWith('54');
 
   if (digitos.startsWith('00')) {
     digitos = digitos.slice(2);
   }
 
+  // Si arranca con código de Argentina (54)
   if (digitos.startsWith('54')) {
-    if (digitos.startsWith('549')) {
-      return digitos;
+    digitos = digitos.slice(2);
+    if (digitos.startsWith('9')) {
+      digitos = digitos.slice(1);
     }
-    if (digitos.startsWith('540')) {
-      digitos = '54' + digitos.slice(3);
-    }
-    return '549' + digitos.slice(2);
   }
 
+  // Quita el 0 de código de área si estuviera presente (ej: 011 -> 11, 0341 -> 341)
   if (digitos.startsWith('0')) {
     digitos = digitos.slice(1);
   }
 
-  // Quita el prefijo '15' típico de móviles argentinos: área (2 a 4 dígitos) + 15 + local (6 a 8 dígitos)
-  const match15 = digitos.match(/^(\d{2,4})15(\d{6,8})$/);
-  if (match15 && match15[1] && match15[2]) {
-    digitos = match15[1] + match15[2];
+  // Quita el prefijo '15' de móviles argentinos:
+  // caso: código de área (2 a 4 dígitos) + 15 + número local (6 a 8 dígitos)
+  const matchArea15 = digitos.match(/^(\d{2,4})15(\d{6,8})$/);
+  if (matchArea15 && matchArea15[1] && matchArea15[2]) {
+    digitos = matchArea15[1] + matchArea15[2];
+  } else if (digitos.startsWith('15') && digitos.length === 10) {
+    digitos = '11' + digitos.slice(2);
+  } else if (digitos.length === 8) {
+    digitos = '11' + digitos;
   }
 
+  // Si es un número internacional explícito que no es de Argentina
+  if (esInternacionalConPlus && digitos.length >= 10) {
+    return digitos;
+  }
+
+  // Formato nacional argentino estándar (10 dígitos: área + local)
   if (digitos.length === 10) {
     return '549' + digitos;
+  }
+
+  if (digitos.length === 11 && digitos.startsWith('9')) {
+    return '54' + digitos;
   }
 
   if (digitos.length >= 8 && digitos.length <= 11) {

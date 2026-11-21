@@ -14,6 +14,7 @@ export interface AuditoriaSistemaProps {
 
 const ACCIONES_LABELS: Record<AccionAuditoria, { label: string; color: string }> = {
   anulacion_venta: { label: 'Anulación / Reversión', color: 'bg-rose-100 text-rose-800 border-rose-300' },
+  cambiar_medio_pago_venta: { label: 'Cambio Medio de Cobro', color: 'bg-amber-100 text-amber-800 border-amber-300' },
   arqueo_caja: { label: 'Arqueo de Turno', color: 'bg-amber-100 text-amber-800 border-amber-300' },
   ajuste_cta_cte_cliente: { label: 'Ajuste Cta. Cte. Cliente', color: 'bg-blue-100 text-blue-800 border-blue-300' },
   ajuste_cta_cte_proveedor: { label: 'Ajuste Cta. Cte. Proveedor', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },

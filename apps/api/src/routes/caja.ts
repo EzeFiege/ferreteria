@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import {
   aCentavos,
   abrirTurnoSchema,
+  cambiarMedioPagoVentaSchema,
   cerrarTurnoSchema,
   deCentavos,
   registrarMovimientoCajaSchema,
@@ -831,6 +832,278 @@ export function registerCajaRoutes(
       return await reply
         .code(resultado.idempotente ? 200 : 201)
         .send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 5B. Corregir medio de cobro de una venta (inmutable: reversión + nuevo movimiento)
+  app.post('/ventas/:ventaId/cambiar-medio-pago', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      assertRoles(claims, ['cajero', 'encargado', 'dueno']);
+
+      const params = request.params as { ventaId?: string };
+      const ventaId = uuidSchema.parse(params.ventaId);
+      const body = cambiarMedioPagoVentaSchema.parse(request.body);
+
+      const resultado = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ db, client }) => {
+          // 1. Obtener la venta
+          const [v] = await db
+            .select()
+            .from(venta)
+            .where(eq(venta.id, ventaId));
+
+          if (!v) {
+            throw new AuthError('Venta no encontrada', 404);
+          }
+
+          // 2. Verificar que el nuevo medio de pago exista y esté activo en el negocio
+          const [nuevoMedio] = await db
+            .select()
+            .from(medioPago)
+            .where(
+              and(
+                eq(medioPago.id, body.nuevoMedioPagoId),
+                eq(medioPago.activo, true),
+              ),
+            );
+
+          if (!nuevoMedio) {
+            throw new AuthError(
+              'El nuevo medio de pago no existe o no está activo',
+              400,
+            );
+          }
+
+          // 3. Buscar movimientos de cobro de la venta (tipo = 'venta', sentido = 'in')
+          const movimientosVenta = await db
+            .select()
+            .from(movimiento)
+            .where(
+              and(
+                eq(movimiento.ventaId, ventaId),
+                eq(movimiento.tipo, 'venta'),
+                eq(movimiento.sentido, 'in'),
+              ),
+            );
+
+          if (movimientosVenta.length === 0) {
+            throw new AuthError('La venta no registra cobros activos', 400);
+          }
+
+          // Buscar cuáles de estos movimientos ya fueron revertidos
+          const reversionesExistentes = await db
+            .select({ revierteId: movimiento.revierteId })
+            .from(movimiento)
+            .where(isNotNull(movimiento.revierteId));
+
+          const revertidosSet = new Set(
+            reversionesExistentes
+              .map((r) => r.revierteId)
+              .filter((id): id is string => id !== null),
+          );
+
+          // Movimiento de cobro activo (el último no revertido)
+          const movimientoActivo = [...movimientosVenta]
+            .reverse()
+            .find((m) => !revertidosSet.has(m.id));
+
+          if (!movimientoActivo) {
+            throw new AuthError(
+              'El cobro de esta venta ya fue anulado o revertido previamente',
+              400,
+            );
+          }
+
+          // Si ya tiene el mismo medio de pago, es idempotente
+          if (movimientoActivo.medioPagoId === body.nuevoMedioPagoId) {
+            return {
+              ventaId,
+              movimientoId: movimientoActivo.id,
+              medioPagoId: body.nuevoMedioPagoId,
+              medioPagoNombre: nuevoMedio.nombre,
+              mensaje: 'El medio de cobro ya es el seleccionado',
+            };
+          }
+
+          // 4. Determinar turno abierto
+          let turnoId = body.turnoId;
+          if (!turnoId) {
+            const [turnoOrig] = await db
+              .select()
+              .from(turnoCaja)
+              .where(eq(turnoCaja.id, v.turnoId));
+
+            if (turnoOrig && turnoOrig.cierraEn === null) {
+              turnoId = turnoOrig.id;
+            } else if (turnoOrig) {
+              const [turnoAbiertoMismaCaja] = await db
+                .select()
+                .from(turnoCaja)
+                .where(
+                  and(
+                    eq(turnoCaja.negocioId, claims.negocioId),
+                    eq(turnoCaja.cajaId, turnoOrig.cajaId),
+                  ),
+                )
+                .orderBy(desc(turnoCaja.abreEn));
+
+              if (turnoAbiertoMismaCaja && turnoAbiertoMismaCaja.cierraEn === null) {
+                turnoId = turnoAbiertoMismaCaja.id;
+              }
+            }
+
+            if (!turnoId) {
+              const [cualquierTurnoAbierto] = await db
+                .select()
+                .from(turnoCaja)
+                .where(isNotNull(turnoCaja.id))
+                .orderBy(desc(turnoCaja.abreEn));
+              if (
+                cualquierTurnoAbierto &&
+                cualquierTurnoAbierto.cierraEn === null
+              ) {
+                turnoId = cualquierTurnoAbierto.id;
+              } else {
+                throw new AuthError(
+                  'Debe haber un turno de caja abierto para registrar la corrección de medio de pago',
+                  409,
+                );
+              }
+            }
+          }
+
+          const codigoVenta = v.id.slice(0, 8).toUpperCase();
+
+          // 5. Insertar movimiento de reversión del medio anterior (sentido: 'out', revierte_id = movimientoActivo.id)
+          const idReversion = body.reversionId ?? crypto.randomUUID();
+          const [reversion] = await db
+            .insert(movimiento)
+            .values({
+              id: idReversion,
+              negocioId: claims.negocioId,
+              turnoId,
+              tipo: 'venta',
+              sentido: 'out',
+              monto: movimientoActivo.monto,
+              medioPagoId: movimientoActivo.medioPagoId,
+              rubroId: movimientoActivo.rubroId,
+              categoriaId: movimientoActivo.categoriaId,
+              ventaId,
+              descripcion: body.motivo
+                ? `Corrección medio de cobro: ${body.motivo}`
+                : `Corrección medio de cobro venta #${codigoVenta}`,
+              revierteId: movimientoActivo.id,
+              creadoPor: claims.usuarioId,
+            })
+            .onConflictDoNothing({ target: movimiento.id })
+            .returning();
+
+          // 6. Insertar nuevo movimiento de cobro con el medio correcto (sentido: 'in', revierte_id = null)
+          const idNuevoMov = body.nuevoMovimientoId ?? crypto.randomUUID();
+          const [nuevoMov] = await db
+            .insert(movimiento)
+            .values({
+              id: idNuevoMov,
+              negocioId: claims.negocioId,
+              turnoId,
+              tipo: 'venta',
+              sentido: 'in',
+              monto: movimientoActivo.monto,
+              medioPagoId: body.nuevoMedioPagoId,
+              rubroId: movimientoActivo.rubroId,
+              categoriaId: movimientoActivo.categoriaId,
+              ventaId,
+              descripcion: `Cobro corregido venta #${codigoVenta} (${nuevoMedio.nombre})`,
+              creadoPor: claims.usuarioId,
+            })
+            .onConflictDoNothing({ target: movimiento.id })
+            .returning();
+
+          // 7. Auditoría
+          await registrarAuditoria(client, {
+            negocioId: claims.negocioId,
+            usuarioId: claims.usuarioId,
+            usuarioEmail: claims.email,
+            rol: claims.rol,
+            accion: 'cambiar_medio_pago_venta',
+            entidad: 'venta',
+            entidadId: ventaId,
+            detalles: {
+              medioAnteriorId: movimientoActivo.medioPagoId,
+              nuevoMedioPagoId: body.nuevoMedioPagoId,
+              nuevoMedioNombre: nuevoMedio.nombre,
+              monto: movimientoActivo.monto,
+              reversionId: reversion?.id ?? idReversion,
+              nuevoMovimientoId: nuevoMov?.id ?? idNuevoMov,
+              motivo: body.motivo ?? null,
+            },
+          });
+
+          return {
+            ventaId,
+            reversionId: reversion?.id ?? idReversion,
+            nuevoMovimientoId: nuevoMov?.id ?? idNuevoMov,
+            medioPagoId: body.nuevoMedioPagoId,
+            medioPagoNombre: nuevoMedio.nombre,
+            monto: movimientoActivo.monto,
+          };
+        },
+      );
+
+      return await reply.code(200).send(resultado);
+    } catch (err: unknown) {
+      return handleRouteError(err, request, reply);
+    }
+  });
+
+  // 5C. Listar ventas recientes del turno para consulta y corrección
+  app.get('/turnos/:turnoId/ventas-recientes', async (request, reply) => {
+    try {
+      const claims = await authenticateRequest(request, verifyToken);
+      const params = request.params as { turnoId?: string };
+      const turnoId = uuidSchema.parse(params.turnoId);
+
+      const ventasList = await withTenantTransaction(
+        pool,
+        claims.negocioId,
+        async ({ client }) => {
+          const sql = `
+            select distinct on (v.id)
+              v.id as venta_id,
+              upper(substr(v.id::text, 1, 8)) as numero,
+              v.total,
+              v.creado_en,
+              c.nombre as cliente_nombre,
+              mp.id as medio_pago_id,
+              mp.nombre as medio_pago_nombre
+            from venta v
+            inner join movimiento m on m.venta_id = v.id and m.tipo = 'venta' and m.sentido = 'in'
+            inner join medio_pago mp on mp.id = m.medio_pago_id
+            left join cliente c on c.id = v.cliente_id
+            left join movimiento rev on rev.revierte_id = m.id
+            where v.turno_id = $1 and rev.id is null
+            order by v.id, m.creado_en desc
+          `;
+          interface VentaRecienteRow {
+            venta_id: string;
+            numero: string;
+            total: string;
+            creado_en: Date;
+            cliente_nombre: string | null;
+            medio_pago_id: string;
+            medio_pago_nombre: string;
+          }
+          const res = await client.query<VentaRecienteRow>(sql, [turnoId]);
+          return res.rows;
+        },
+      );
+
+      return await reply.send(ventasList);
     } catch (err: unknown) {
       return handleRouteError(err, request, reply);
     }
